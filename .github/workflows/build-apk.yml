@@ -1,0 +1,128 @@
+# ArDroid — cloud APK build (GitHub Actions)
+#
+# Trigger manually from the Actions tab ("Run workflow"), then download the
+# APK from the run's artifacts and install it on your phone.
+#
+# How it works (fast path):
+#   1. Downloads a Podroid release APK and reuses its PREBUILT,
+#      distro-agnostic components: kernel (vmlinuz-virt), initramfs
+#      (initrd.img) and the QEMU native libraries. These are identical
+#      between Podroid and ArDroid — only the guest rootfs changed.
+#   2. Builds ONLY the new Arch Linux ARM rootfs with Docker
+#      (build-rootfs/Dockerfile.rootfs) -> arch-rootfs.squashfs.
+#   3. Builds the Android APK with Gradle (debug, signed with the debug
+#      key — installable directly on a phone).
+#
+# The full from-source build (kernel + QEMU + initramfs) is still
+# available locally via ./build-all.sh all on a machine with Docker.
+
+name: Build ArDroid APK (cloud)
+
+on:
+  workflow_dispatch:
+    inputs:
+      podroid_release:
+        description: >-
+          Podroid release tag to reuse the prebuilt kernel / initramfs /
+          QEMU from (distro-agnostic, unchanged by the Arch port)
+        required: false
+        default: 'v1.2.9'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Check out ArDroid
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          # keep the Android SDK (we need it below)
+          android: false
+
+      - name: Set up QEMU (arm64 emulation for the rootfs build)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Download Podroid release APK (prebuilt kernel/initramfs/QEMU)
+        run: |
+          set -euo pipefail
+          TAG='${{ inputs.podroid_release }}'
+          curl -sSL --retry 3 \
+            -o /tmp/podroid-stock.apk \
+            "https://github.com/ExTV/Podroid/releases/download/${TAG}/Podroid-${TAG}-release.apk"
+          ls -la /tmp/podroid-stock.apk
+
+      - name: Extract prebuilt kernel, initramfs and QEMU libs
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/prebuilt && mkdir -p /tmp/prebuilt
+          cd /tmp/prebuilt
+          # NOTE: libtermux.so is intentionally NOT extracted — the vendored
+          # terminal-emulator module compiles it via AGP's NDK build.
+          unzip -o -q /tmp/podroid-stock.apk \
+            'assets/vmlinuz-virt' \
+            'assets/initrd.img' \
+            'assets/qemu/*' \
+            'lib/arm64-v8a/libqemu-system-aarch64.so' \
+            'lib/arm64-v8a/libslirp.so' \
+            'lib/arm64-v8a/libpodroid-bridge.so' \
+            'lib/arm64-v8a/libpodroid-launcher.so'
+          ASSETS="$GITHUB_WORKSPACE/app/src/main/assets"
+          JNILIBS="$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a"
+          mkdir -p "$ASSETS" "$JNILIBS"
+          cp assets/vmlinuz-virt assets/initrd.img "$ASSETS/"
+          rm -rf "$ASSETS/qemu" && cp -r assets/qemu "$ASSETS/"
+          cp lib/arm64-v8a/*.so "$JNILIBS/"
+          echo '--- assets ---' && ls -la "$ASSETS"
+          echo '--- jniLibs ---' && ls -la "$JNILIBS"
+
+      - name: Build Arch Linux ARM rootfs
+        run: |
+          set -euo pipefail
+          SYSVER=$(grep -E '^[[:space:]]*versionCode[[:space:]]*=' \
+            app/build.gradle.kts | grep -oE '[0-9]+' | head -1)
+          echo "SYSTEM_VERSION=${SYSVER:-0}"
+          docker buildx build \
+            -f build-rootfs/Dockerfile.rootfs \
+            -t ardroid-rootfs:latest \
+            --build-arg "SYSTEM_VERSION=${SYSVER:-0}" \
+            --output "type=local,dest=$GITHUB_WORKSPACE/app/src/main/assets" \
+            build-rootfs/
+          ls -la "$GITHUB_WORKSPACE/app/src/main/assets/arch-rootfs.squashfs"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform + NDK
+        run: |
+          sdkmanager --install "platform-tools" "platforms;android-36" "ndk;27.2.12479018"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Build debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Show APK info
+        run: ls -la app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ardroid-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
