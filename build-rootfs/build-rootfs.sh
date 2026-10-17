@@ -15,6 +15,20 @@ if ! grep -q '^DisableSandbox' /etc/pacman.conf; then
     sed -i 's/^\[options\]$/[options]\nDisableSandbox/' /etc/pacman.conf
 fi
 
+# ── fake systemctl for the pacman run ────────────────────────────────────────
+# Package install hooks call `systemctl` (daemon-reload, mark-for-restart,
+# ...), but systemd is not PID 1 inside this builder container, so every
+# such hook fails and aborts the whole transaction. Shadow systemctl with
+# a no-op for the duration of the pacman run. /build is excluded from the
+# final squashfs, so the real systemctl from the systemd package ships
+# untouched. (This script itself never calls systemctl — units are enabled
+# via manual .wants symlinks — so the shadow affects only hooks.)
+mkdir -p /build/bin
+printf '#!/bin/sh\nexit 0\n' > /build/bin/systemctl
+chmod +x /build/bin/systemctl
+PATH="/build/bin:$PATH"
+export PATH
+
 # ── pacman keyring ───────────────────────────────────────────────────────────
 # The Arch Linux ARM keyring ships in the tarball but is never initialized;
 # without this every package install fails signature verification.
