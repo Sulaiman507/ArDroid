@@ -120,7 +120,11 @@ rm -f "$ROOTFS/etc/resolv.conf"
 
 # ── hostname ─────────────────────────────────────────────────────────────────
 echo "ardroid" > "$ROOTFS/etc/hostname"
-printf '127.0.0.1 localhost ardroid\n::1 localhost ip6-localhost\n' > "$ROOTFS/etc/hosts"
+# NOTE: /etc/hosts is a read-only bind mount inside `docker build`, so it
+# cannot be written here (the build failed with "Read-only file system").
+# Stage the desired content instead; the guest installs it at first boot
+# (see podroid-bootstrap.sh), where /etc/hosts is a regular writable file.
+printf '127.0.0.1 localhost ardroid\n::1 localhost ip6-localhost\n' > "$ROOTFS/etc/hosts.ardroid"
 
 # ── login banner ─────────────────────────────────────────────────────────────
 cat > "$ROOTFS/etc/issue" <<'EOF'

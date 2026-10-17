@@ -37,6 +37,10 @@ chmod 0666 /dev/ptmx /dev/pts/ptmx 2>/dev/null
 # Hostname
 [ -r /etc/hostname ] && hostname -F /etc/hostname 2>/dev/null
 
+# /etc/hosts could not be baked at image build time (read-only bind mount
+# during `docker build`); install the staged copy now that it is writable.
+[ -f /etc/hosts.ardroid ] && cat /etc/hosts.ardroid > /etc/hosts
+
 depmod -a 2>/dev/null
 for m in 9p 9pnet 9pnet_virtio; do modprobe "$m" 2>/dev/null; done
 
