@@ -1,0 +1,15 @@
+[Unit]
+Description=ArDroid X11 server (Xvnc + pulseaudio) for in-app viewer
+After=podroid-bootstrap.service podroid-network.service
+Before=podroid-ready.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/lib/podroid/podroid-x11.sh
+StandardOutput=append:/var/log/pulse.log
+StandardError=append:/var/log/pulse.log
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

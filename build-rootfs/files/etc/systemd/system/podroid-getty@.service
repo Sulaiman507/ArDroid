@@ -1,0 +1,10 @@
+[Unit]
+Description=ArDroid getty on %I (backend-aware serial console)
+
+[Service]
+ExecStart=/usr/local/bin/podroid-getty %I
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=getty.target

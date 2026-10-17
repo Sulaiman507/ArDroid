@@ -104,7 +104,7 @@ class PodroidApplication : Application() {
                 { copyAssetDir("qemu", filesDir, forceCopy) },
                 { copyAssetIfNeeded("vmlinuz-virt", File(filesDir, "vmlinuz-virt"), forceCopy) },
                 { copyAssetIfNeeded("initrd.img", File(filesDir, "initrd.img"), forceCopy) },
-                { copyAssetIfNeeded("alpine-rootfs.squashfs", File(filesDir, "alpine-rootfs.squashfs"), forceCopy) },
+                { copyAssetIfNeeded("arch-rootfs.squashfs", File(filesDir, "arch-rootfs.squashfs"), forceCopy) },
             )
             val pool = Executors.newFixedThreadPool(tasks.size.coerceAtMost(4))
             var allSucceeded = true

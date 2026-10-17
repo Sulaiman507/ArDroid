@@ -1,0 +1,21 @@
+[Unit]
+Description=ArDroid AVF Downloads share (9p over vsock, AVF only)
+After=podroid-bootstrap.service podroid-network.service podroid-vsock.service
+Before=podroid-ready.service
+ConditionKernelCommandLine=podroid.backend=avf
+
+[Service]
+Type=simple
+ExecStartPre=/bin/mkdir -p /mnt/downloads
+ExecStart=/usr/local/bin/podroid-vsock-agent downloads-9p
+# One-time cleanup of the stray container-count file an older Podroid wrote
+# into the user's Downloads dir. Detached: the 9p mount completes
+# asynchronously once Android accepts the vsock rendezvous.
+ExecStartPost=/bin/sh -c '( _i=0; while [ "$_i" -lt 30 ] && ! mountpoint -q /mnt/downloads 2>/dev/null; do sleep 1; _i=$((_i + 1)); done; rm -f /mnt/downloads/Podroid/container-count 2>/dev/null ) &'
+StandardOutput=append:/var/log/podroid-downloads.log
+StandardError=append:/var/log/podroid-downloads.log
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

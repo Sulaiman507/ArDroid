@@ -1,0 +1,12 @@
+[Unit]
+Description=ArDroid VM system bootstrap (cgroups, modules, devpts, sysctl)
+After=podroid-migrate.service
+Before=podroid-network.service podroid-x11.service podroid-vsock.service podroid-hostd.service podroid-resize.service podroid-lxc-net.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/podroid/podroid-bootstrap.sh
+
+[Install]
+WantedBy=multi-user.target

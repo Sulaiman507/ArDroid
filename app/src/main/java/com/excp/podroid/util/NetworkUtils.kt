@@ -99,7 +99,7 @@ object NetworkUtils {
      * first, capped and sanitized for injection into the guest's `/etc/resolv.conf`
      * (see [sanitizeDnsList]).
      *
-     * IPv4-only here on purpose: musl's resolver in the Alpine guest reads a plain
+     * IPv4-only here on purpose: the guest resolver reads a plain
      * `nameserver <addr>` line per line, and the guest network stack this feeds (see
      * `podroid-network`) is IPv4-only, so a literal we can't reach is worse than none.
      */
