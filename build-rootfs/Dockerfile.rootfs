@@ -44,11 +44,21 @@ COPY files /build/files
 COPY build-rootfs.sh /build/build-rootfs.sh
 RUN chmod +x /build/build-rootfs.sh && /build/build-rootfs.sh
 
+# -e proc/sys/dev/run/tmp: these are live kernel/API mounts inside the builder
+#   container — never archive their contents.
+# -p ...: ...but the image MUST still contain them as empty directories:
+#   init-podroid does `mount --move /proc|/sys|/dev` into the new root before
+#   switch_root, and without those mount points boot dies with
+#   "FATAL: mount --move /proc failed". (The original Alpine image shipped
+#   them; excluding them entirely broke boot.)
 RUN mksquashfs / /build/arch-rootfs.squashfs \
     -comp zstd -Xcompression-level 19 -all-root -noappend \
-    -e build proc sys dev run tmp
-# -e dev: devtmpfs is mounted at boot (initramfs), no device nodes ship.
-# -e proc/sys/run/tmp: (re)created at boot; nothing useful ships in them.
+    -e build proc sys dev run tmp \
+    -p "/proc d 555 0 0" \
+    -p "/sys  d 555 0 0" \
+    -p "/dev  d 755 0 0" \
+    -p "/run  d 755 0 0" \
+    -p "/tmp  d 1777 0 0"
 # (No -no-xattrs: rootless podman's newuidmap/newgidmap need their
 # file capabilities preserved; they're stored as security.capability xattr.)
 
