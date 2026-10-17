@@ -64,5 +64,16 @@ RUN mksquashfs / /build/arch-rootfs.squashfs \
 # (No -no-xattrs: rootless podman's newuidmap/newgidmap need their
 # file capabilities preserved; they're stored as security.capability xattr.)
 
+# Fail fast if the image is malformed: init-podroid NEEDS these mount points
+# (see above). This check runs inside the build — a broken image fails here
+# in minutes instead of wasting a full phone-test cycle.
+RUN unsquashfs -l /build/arch-rootfs.squashfs > /build/squashfs.list && \
+    for d in proc sys dev run tmp; do \
+        grep -q "^squashfs-root/$d/*$" /build/squashfs.list || \
+        { echo "FATAL: /$d missing from arch-rootfs.squashfs" >&2; exit 1; }; \
+    done && \
+    echo "squashfs mount-point check OK" && \
+    rm /build/squashfs.list
+
 FROM scratch AS export
 COPY --from=builder /build/arch-rootfs.squashfs /arch-rootfs.squashfs
