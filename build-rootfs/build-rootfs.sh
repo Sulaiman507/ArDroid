@@ -191,15 +191,18 @@ mkdir -p "$ROOTFS/etc/systemd/system/multi-user.target.wants"
 for svc in podroid-migrate podroid-bootstrap podroid-network podroid-resize \
            podroid-vsock podroid-downloads podroid-hostd podroid-x11 \
            podroid-lxc-net podroid-ready dropbear docker lxc; do
-    # Vendor units (docker, lxc) live in /usr/lib; ours in /etc. A .wants
-    # symlink enables the unit by name even if its /etc target dangles.
-    if [ -e "$ROOTFS/etc/systemd/system/$svc.service" ] || \
-       [ -e "$ROOTFS/usr/lib/systemd/system/$svc.service" ]; then
-        ln -sf "/etc/systemd/system/$svc.service" \
-            "$ROOTFS/etc/systemd/system/multi-user.target.wants/$svc.service"
+    # Our units live in /etc, vendor units (docker, lxc) in /usr/lib —
+    # point the .wants symlink at the real location, never a dangling path.
+    if [ -e "$ROOTFS/etc/systemd/system/$svc.service" ]; then
+        _target="/etc/systemd/system/$svc.service"
+    elif [ -e "$ROOTFS/usr/lib/systemd/system/$svc.service" ]; then
+        _target="/usr/lib/systemd/system/$svc.service"
     else
         echo "WARN: unit $svc.service missing, skipping enable"
+        continue
     fi
+    ln -sf "$_target" \
+        "$ROOTFS/etc/systemd/system/multi-user.target.wants/$svc.service"
 done
 # Serial gettys (backend-agnostic via podroid-getty wrapper, like inittab did).
 mkdir -p "$ROOTFS/etc/systemd/system/getty.target.wants"
