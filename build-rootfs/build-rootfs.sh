@@ -19,19 +19,33 @@ if ! grep -q '^DisableSandbox' /etc/pacman.conf; then
     PACMAN_SANDBOX_DISABLED=1
 fi
 
-# ── fake systemctl for the pacman run ────────────────────────────────────────
-# Package install hooks call `systemctl` (daemon-reload, mark-for-restart,
-# ...), but systemd is not PID 1 inside this builder container, so every
-# such hook fails and aborts the whole transaction. Shadow systemctl with
-# a no-op for the duration of the pacman run. /build is excluded from the
-# final squashfs, so the real systemctl from the systemd package ships
-# untouched. (This script itself never calls systemctl — units are enabled
-# via manual .wants symlinks — so the shadow affects only hooks.)
-mkdir -p /build/bin
-printf '#!/bin/sh\nexit 0\n' > /build/bin/systemctl
-chmod +x /build/bin/systemctl
-PATH="/build/bin:$PATH"
-export PATH
+# ── neuter hooks that need a live systemd ────────────────────────────────────
+# Most hooks go through /usr/share/libalpm/scripts/systemd-hook, which
+# skips gracefully when systemd is not PID 1. A few call /usr/bin/systemctl
+# DIRECTLY by absolute path instead — e.g. openssh's
+# 10-openssh-mark-sshd-for-restart.hook ("Marking sshd.service for
+# restart...") — and abort the whole transaction inside this builder
+# container, where systemd can never be PID 1. Move such hooks aside for
+# the pacman run (NoExtract keeps upgrades from reinstalling them), then
+# restore everything afterwards so the shipped guest is pristine.
+HOOKS_NEUTERED=""
+mkdir -p /build/hooks-disabled
+for hook in /usr/share/libalpm/hooks/*.hook; do
+    [ -e "$hook" ] || continue
+    if grep -qE '^Exec = /usr/bin/systemctl' "$hook"; then
+        base="usr/share/libalpm/hooks/$(basename "$hook")"
+        mv "$hook" /build/hooks-disabled/
+        echo "NoExtract = $base" >> /etc/pacman.conf
+        HOOKS_NEUTERED="$HOOKS_NEUTERED$base;"
+    fi
+done
+# openssh's hooks arrive WITH the package during this transaction, so the
+# scan above cannot see them — exclude the unguarded one explicitly:
+OPENSSH_MARK_HOOK="usr/share/libalpm/hooks/10-openssh-mark-sshd-for-restart.hook"
+if ! grep -qF "$OPENSSH_MARK_HOOK" /etc/pacman.conf; then
+    echo "NoExtract = $OPENSSH_MARK_HOOK" >> /etc/pacman.conf
+    HOOKS_NEUTERED="$HOOKS_NEUTERED$OPENSSH_MARK_HOOK;"
+fi
 
 # ── pacman keyring ───────────────────────────────────────────────────────────
 # The Arch Linux ARM keyring ships in the tarball but is never initialized;
@@ -227,6 +241,27 @@ mkdir -p "$ROOTFS/var/lib/containers/storage" \
          "$ROOTFS/run/crun" \
          "$ROOTFS/mnt/persist" \
          "$ROOTFS/var/log"
+
+# ── restore neutered hooks ───────────────────────────────────────────────────
+# Bring back the hooks moved aside above, drop the NoExtract workarounds,
+# and re-extract the skipped openssh hook from the package cache — so the
+# shipped guest contains every file its packages ship. (Runs before the
+# cache cleanup below.)
+for hook in /build/hooks-disabled/*.hook; do
+    [ -e "$hook" ] || continue
+    mv "$hook" /usr/share/libalpm/hooks/
+done
+if [ -n "$HOOKS_NEUTERED" ]; then
+    _rest="$HOOKS_NEUTERED"
+    while [ -n "$_rest" ]; do
+        _one="${_rest%%;*}"; _rest="${_rest#*;}"
+        [ -n "$_one" ] && sed -i "\|^NoExtract = $_one\$|d" /etc/pacman.conf
+    done
+    _ospkg=$(ls /var/cache/pacman/pkg/openssh-[0-9]*.pkg.tar.zst 2>/dev/null | head -1)
+    if [ -n "$_ospkg" ] && [ ! -e "/$OPENSSH_MARK_HOOK" ]; then
+        tar -xf "$_ospkg" -C / "$OPENSSH_MARK_HOOK"
+    fi
+fi
 
 # ── shrink: docs, caches, logs ───────────────────────────────────────────────
 rm -rf "$ROOTFS/usr/share/man" "$ROOTFS/usr/share/doc" "$ROOTFS/usr/share/info"
