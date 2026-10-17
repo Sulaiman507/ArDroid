@@ -11,8 +11,12 @@ ROOTFS=/
 # kernels (e.g. GitHub Actions runners) often lack Landlock, which makes
 # every pacman download fail ("restricting filesystem access failed").
 # This is a throwaway builder container, so disable the sandbox.
+# (Removed again after the pacman run below — the shipped guest keeps
+# pacman's default sandboxing.)
+PACMAN_SANDBOX_DISABLED=0
 if ! grep -q '^DisableSandbox' /etc/pacman.conf; then
     sed -i 's/^\[options\]$/[options]\nDisableSandbox/' /etc/pacman.conf
+    PACMAN_SANDBOX_DISABLED=1
 fi
 
 # ── fake systemctl for the pacman run ────────────────────────────────────────
@@ -57,6 +61,13 @@ pacman -Syu --noconfirm \
     ttf-dejavu xorg-fonts-misc \
     dhcpcd \
     squashfs-tools
+
+# ── restore pacman.conf ──────────────────────────────────────────────────────
+# The DisableSandbox above was a builder-only workaround; take it back out
+# so the shipped guest keeps pacman's default download sandboxing.
+if [ "$PACMAN_SANDBOX_DISABLED" = 1 ]; then
+    sed -i '/^DisableSandbox$/d' /etc/pacman.conf
+fi
 
 # ── file capabilities for rootless podman ────────────────────────────────────
 # setcap explicitly: the squashfs must ship the security.capability xattr
