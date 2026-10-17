@@ -6,6 +6,15 @@
 set -eu
 ROOTFS=/
 
+# ── pacman sandbox ───────────────────────────────────────────────────────────
+# pacman 7+ sandboxes package downloads with Landlock; qemu-user/Docker
+# kernels (e.g. GitHub Actions runners) often lack Landlock, which makes
+# every pacman download fail ("restricting filesystem access failed").
+# This is a throwaway builder container, so disable the sandbox.
+if ! grep -q '^DisableSandbox' /etc/pacman.conf; then
+    sed -i 's/^\[options\]$/[options]\nDisableSandbox/' /etc/pacman.conf
+fi
+
 # ── pacman keyring ───────────────────────────────────────────────────────────
 # The Arch Linux ARM keyring ships in the tarball but is never initialized;
 # without this every package install fails signature verification.
