@@ -76,6 +76,39 @@ pacman -Syu --noconfirm \
     dhcpcd \
     squashfs-tools
 
+# ── box64 (x86_64 userspace emulator) from AUR ────────────────────────────────
+# Not in the ALARM repos (checked the aarch64 extra db); the AUR package's
+# arch array includes aarch64, so build it here with makepkg. Lets the guest
+# run x86_64 binaries directly — the practical answer to "does ARM Arch run
+# everything". Must run while DisableSandbox is still active above (the
+# builder kernel lacks Landlock too) and before pacman.conf is restored below.
+# Build deps go in --asdeps so the orphan sweep afterwards drops exactly what
+# the build added. sudo/gzip are ALSO in base-devel: re-mark them explicit so
+# the sweep can't take them (the guest needs sudo for wheel).
+pacman -S --asdeps --noconfirm --needed base-devel git cmake python
+pacman -D --asexplicit sudo gzip
+# box64.install's post_install runs `systemctl restart systemd-binfmt`;
+# systemd is never PID 1 in this builder, so neuter it for the install.
+mkdir -p /build/bin
+printf '#!/bin/sh\nexit 0\n' > /build/bin/systemctl
+chmod +x /build/bin/systemctl
+useradd -m builder
+printf 'builder ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/builder
+chmod 0440 /etc/sudoers.d/builder
+su builder -c 'git clone --depth 1 https://aur.archlinux.org/box64.git /tmp/box64-build && cd /tmp/box64-build && makepkg -s --noconfirm'
+PATH=/build/bin:$PATH pacman -U --noconfirm /tmp/box64-build/box64-*.pkg.tar.zst
+# Fail fast: the binary must actually execute on this (emulated) aarch64.
+box64 --help > /dev/null || { echo "FATAL: box64 did not survive the build" >&2; exit 1; }
+rm -rf /tmp/box64-build /build/bin
+userdel -r builder
+rm -f /etc/sudoers.d/builder
+# Drop the toolchain; the user can `pacman -S base-devel` themselves.
+_orp=$(pacman -Qtdq 2>/dev/null || true)
+if [ -n "$_orp" ]; then
+    # shellcheck disable=SC2086
+    pacman -Rs --noconfirm $_orp || true
+fi
+
 # ── restore pacman.conf ──────────────────────────────────────────────────────
 # The DisableSandbox above was a builder-only workaround; take it back out
 # so the shipped guest keeps pacman's default download sandboxing.

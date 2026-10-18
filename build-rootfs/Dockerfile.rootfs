@@ -72,7 +72,9 @@ RUN unsquashfs -l /build/arch-rootfs.squashfs > /build/squashfs.list && \
         grep -q "^squashfs-root/$d/*$" /build/squashfs.list || \
         { echo "FATAL: /$d missing from arch-rootfs.squashfs" >&2; exit 1; }; \
     done && \
-    echo "squashfs mount-point check OK" && \
+    grep -q "^squashfs-root/usr/bin/box64$" /build/squashfs.list || \
+    { echo "FATAL: /usr/bin/box64 missing from arch-rootfs.squashfs" >&2; exit 1; } && \
+    echo "squashfs content check OK" && \
     rm /build/squashfs.list
 
 FROM scratch AS export
