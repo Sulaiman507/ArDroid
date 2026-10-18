@@ -96,7 +96,14 @@ useradd -m builder
 printf 'builder ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/builder
 chmod 0440 /etc/sudoers.d/builder
 su builder -c 'git clone --depth 1 https://aur.archlinux.org/box64.git /tmp/box64-build && cd /tmp/box64-build && makepkg -s --noconfirm'
-PATH=/build/bin:$PATH pacman -U --noconfirm /tmp/box64-build/box64-*.pkg.tar.zst
+# Ask makepkg for the exact package path (robust against naming variations).
+_pkg=$(su builder -c 'cd /tmp/box64-build && makepkg --packagelist' | head -1)
+if [ -z "$_pkg" ] || [ ! -f "$_pkg" ]; then
+    echo "FATAL: box64 package not produced; /tmp/box64-build contains:" >&2
+    ls -la /tmp/box64-build/ >&2
+    exit 1
+fi
+PATH=/build/bin:$PATH pacman -U --noconfirm "$_pkg"
 # Fail fast: the binary must actually execute on this (emulated) aarch64.
 box64 --help > /dev/null || { echo "FATAL: box64 did not survive the build" >&2; exit 1; }
 rm -rf /tmp/box64-build /build/bin
