@@ -2,7 +2,7 @@
 # ArDroid VM system bootstrap (cgroups, modules, devpts, sysctl).
 # Ported from Podroid's OpenRC podroid-bootstrap; runs as a systemd oneshot
 # right after podroid-migrate.
-set -eu
+set -u  # NOTE: no -e — these are best-effort boot scripts (ported from OpenRC); a single failing optional command must not abort the whole script
 
 echo "Loading kernel modules..." > /dev/console
 

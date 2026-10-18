@@ -2,7 +2,7 @@
 # ArDroid system migrations (runs versioned upgrade scripts once).
 # Ported from Podroid's OpenRC podroid-migrate: runs early, before the rest
 # of the bringup, so migrations can prepare state other services rely on.
-set -eu
+set -u  # NOTE: no -e — these are best-effort boot scripts (ported from OpenRC); a single failing optional command must not abort the whole script
 
 SYSVER_FILE="/etc/podroid/system-version"
 APPLIED_FILE="/mnt/persist/.podroid/applied-version"

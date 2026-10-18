@@ -1,7 +1,7 @@
 #!/bin/sh
 # ArDroid VM ready marker (consumed by the Android boot detector).
 # Ported from Podroid's OpenRC podroid-ready: runs after everything else.
-set -eu
+set -u  # NOTE: no -e — these are best-effort boot scripts (ported from OpenRC); a single failing optional command must not abort the whole script
 
 # OOM-protect ArDroid's infrastructure processes so a hungry user app
 # (Firefox, Chromium, big npm builds, podman pulls) gets reaped first.

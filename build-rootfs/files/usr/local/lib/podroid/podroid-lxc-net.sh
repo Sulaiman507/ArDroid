@@ -3,7 +3,7 @@
 # Arch replacement for Alpine's dnsmasq.lxcbr0 (lxc-bridge) OpenRC service:
 # creates the bridge, assigns the address, serves DHCP/DNS to containers,
 # and masquerades their traffic. dnsmasq daemonizes itself and stays up.
-set -eu
+set -u  # NOTE: no -e — these are best-effort boot scripts (ported from OpenRC); a single failing optional command must not abort the whole script
 
 ip link show lxcbr0 >/dev/null 2>&1 || ip link add lxcbr0 type bridge
 ip addr show lxcbr0 2>/dev/null | grep -q '10.0.3.1/24' \

@@ -4,7 +4,7 @@
 # if pulseaudio dies the unit restarts, bringing Xvnc back too).
 # Ported from Podroid's OpenRC podroid-x11 (start-stop-daemon replaced by
 # plain backgrounding + a liveness poll).
-set -eu
+set -u  # NOTE: no -e — these are best-effort boot scripts (ported from OpenRC); a single failing optional command must not abort the whole script
 
 XVNC_DISPLAY=:0
 XVNC_GEOMETRY=1280x720

@@ -2,7 +2,7 @@
 # ArDroid VM networking (10.0.2.15 via SLIRP, or DHCP on AVF).
 # Ported from Podroid's OpenRC podroid-network. udhcpc (busybox) is replaced
 # with dhcpcd, which ships with Arch's base.
-set -eu
+set -u  # NOTE: no -e — these are best-effort boot scripts (ported from OpenRC); a single failing optional command must not abort the whole script
 
 # Validate only plain dotted-quad IPv4 literals before they reach resolv.conf.
 is_valid_ipv4() {
