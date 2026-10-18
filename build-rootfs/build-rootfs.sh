@@ -126,6 +126,16 @@ echo "ardroid" > "$ROOTFS/etc/hostname"
 # (see podroid-bootstrap.sh), where /etc/hosts is a regular writable file.
 printf '127.0.0.1 localhost ardroid\n::1 localhost ip6-localhost\n' > "$ROOTFS/etc/hosts.ardroid"
 
+# ── pacman: DisableSandbox in the GUEST image ─────────────────────────────────
+# The VM kernel (Alpine's prebuilt vmlinuz-virt, reused as-is) has no Landlock
+# support, so pacman 7's download sandbox can never work inside the guest —
+# `pacman -Syu` fails with "restricting filesystem access failed because
+# Landlock is not supported by the kernel!". The builder-only DisableSandbox
+# above covers the image build; the guest needs its own copy, permanently.
+if ! grep -q '^DisableSandbox' "$ROOTFS/etc/pacman.conf"; then
+    sed -i 's/^\[options\]$/[options]\nDisableSandbox/' "$ROOTFS/etc/pacman.conf"
+fi
+
 # ── login banner ─────────────────────────────────────────────────────────────
 cat > "$ROOTFS/etc/issue" <<'EOF'
 Welcome to ArDroid (Arch Linux ARM)
