@@ -56,32 +56,35 @@ jobs:
         run: |
           set -euo pipefail
           BRANCH='${{ github.ref_name }}'
+          REPO='${{ github.repository }}'
+          RUN_ID='${{ github.run_id }}'
+          API="https://api.github.com/repos/$REPO"
+          AUTH=(-s -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
           # Last successful run of THIS workflow on this branch, excluding
           # the current run. Its head_sha is what we diff against.
+          # curl is used instead of `gh` (the gh CLI proved unreliable here).
           # If the API call fails, fall back to a full rebuild (safe).
-          if ! API_OUT=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/build-apk.yml/runs" \
-            -f branch="$BRANCH" -f status=success -f per_page=10 \
-            --jq '[.workflow_runs[] | select(.id != ${{ github.run_id }})][0]
-                  | "\(.id) \(.head_sha)"' 2>/dev/null); then
-            echo "rebuild=true" >> "$GITHUB_OUTPUT"
-            echo "reason=api-failed-fallback-to-rebuild" >> "$GITHUB_OUTPUT"
-            echo "API call failed — full rebuild (safe fallback)."
-            exit 0
-          fi
-          read -r LAST_ID LAST_SHA <<< "$API_OUT"
-          if [ -z "$LAST_ID" ] || [ "$LAST_ID" = "null" ]; then
+          API_RESP="$(curl "${AUTH[@]}" \
+            "$API/actions/workflows/build-apk.yml/runs?branch=$BRANCH&status=success&per_page=10" \
+            || true)"
+          LAST_ID="$(echo "$API_RESP" | jq -r \
+            --argjson rid "$RUN_ID" \
+            '[.workflow_runs[] | select(.id != $rid)][0] | .id // empty')"
+          LAST_SHA="$(echo "$API_RESP" | jq -r \
+            --argjson rid "$RUN_ID" \
+            '[.workflow_runs[] | select(.id != $rid)][0] | .head_sha // empty')"
+          if [ -z "$LAST_ID" ]; then
             echo "rebuild=true" >> "$GITHUB_OUTPUT"
             echo "reason=no-previous-successful-run" >> "$GITHUB_OUTPUT"
-            echo "No previous successful run — full rebuild."
+            echo "No previous successful run (or API call failed) — full rebuild."
             exit 0
           fi
           # The squashfs must exist as an artifact on that run (runs from
           # before this optimization have only the APK artifact).
-          ARTIFACT_ID=$(gh api \
-            "repos/${{ github.repository }}/actions/runs/$LAST_ID/artifacts" \
-            --jq '.artifacts[] | select(.name == "arch-rootfs-squashfs") | .id' \
-            2>/dev/null | head -1 || true)
+          ARTIFACT_ID="$(curl "${AUTH[@]}" \
+            "$API/actions/runs/$LAST_ID/artifacts" \
+            | jq -r '.artifacts[] | select(.name == "arch-rootfs-squashfs") | .id // empty' \
+            | head -1 || true)"
           if [ -z "$ARTIFACT_ID" ]; then
             echo "rebuild=true" >> "$GITHUB_OUTPUT"
             echo "reason=no-reusable-squashfs-artifact" >> "$GITHUB_OUTPUT"
