@@ -42,6 +42,13 @@ ENV SYSTEM_VERSION=${SYSTEM_VERSION}
 
 COPY files /build/files
 COPY build-rootfs.sh /build/build-rootfs.sh
+# Optional prebuilt box64 package from the CI cache (actions/cache). The
+# workflow ALWAYS provides this file (empty when the cache missed); when it
+# holds a valid package, build-rootfs.sh installs it instead of compiling
+# box64 from the AUR (~1.5h saved).
+# NOTE for local builds: `touch build-rootfs/box64-prebuilt.pkg.tar.zst`
+# first, or this COPY fails.
+COPY box64-prebuilt.pkg.tar.zst /build/box64-prebuilt.pkg.tar.zst
 RUN chmod +x /build/build-rootfs.sh && /build/build-rootfs.sh
 
 # -p ...: the image MUST contain proc/sys/dev/run/tmp as empty directories:
@@ -79,3 +86,6 @@ RUN unsquashfs -l /build/arch-rootfs.squashfs > /build/squashfs.list && \
 
 FROM scratch AS export
 COPY --from=builder /build/arch-rootfs.squashfs /arch-rootfs.squashfs
+# The box64 package (either the cached one reused, or freshly built) is
+# exported so the workflow can feed it back into the actions/cache.
+COPY --from=builder /build/box64.pkg.tar.zst /box64.pkg.tar.zst

@@ -3,13 +3,17 @@
 # Trigger manually from the Actions tab ("Run workflow"), then download the
 # APK from the run's artifacts and install it on your phone.
 #
-# How it works (fast path):
+# How it works:
 #   1. Downloads a Podroid release APK and reuses its PREBUILT,
 #      distro-agnostic components: kernel (vmlinuz-virt), initramfs
 #      (initrd.img) and the QEMU native libraries. These are identical
 #      between Podroid and ArDroid — only the guest rootfs changed.
-#   2. Builds ONLY the new Arch Linux ARM rootfs with Docker
-#      (build-rootfs/Dockerfile.rootfs) -> arch-rootfs.squashfs.
+#   2. Builds the Arch Linux ARM rootfs with Docker
+#      (build-rootfs/Dockerfile.rootfs) -> arch-rootfs.squashfs,
+#      UNLESS build-rootfs/ is unchanged since the last successful build —
+#      then the squashfs is reused from that run's artifact (~15 min build).
+#      box64 is cached as a prebuilt package (actions/cache) so the ~1.5h
+#      AUR compile is skipped whenever the AUR HEAD hasn't changed.
 #   3. Builds the Android APK with Gradle (debug, signed with the debug
 #      key — installable directly on a phone).
 #
@@ -28,6 +32,10 @@ on:
         required: false
         default: 'v1.2.9'
 
+permissions:
+  actions: read      # list workflow runs + download artifacts (rootfs reuse)
+  contents: read     # checkout
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -36,6 +44,66 @@ jobs:
     steps:
       - name: Check out ArDroid
         uses: actions/checkout@v4
+        with:
+          # Full history: the rootfs-reuse check diffs against the last
+          # successful run's commit.
+          fetch-depth: 0
+
+      - name: Check if rootfs needs a rebuild
+        id: rootfs-check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCH='${{ github.ref_name }}'
+          # Last successful run of THIS workflow on this branch, excluding
+          # the current run. Its head_sha is what we diff against.
+          # If the API call fails, fall back to a full rebuild (safe).
+          if ! API_OUT=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/build-apk.yml/runs" \
+            -f branch="$BRANCH" -f status=success -f per_page=10 \
+            --jq '[.workflow_runs[] | select(.id != ${{ github.run_id }})][0]
+                  | "\(.id) \(.head_sha)"' 2>/dev/null); then
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+            echo "reason=api-failed-fallback-to-rebuild" >> "$GITHUB_OUTPUT"
+            echo "API call failed — full rebuild (safe fallback)."
+            exit 0
+          fi
+          read -r LAST_ID LAST_SHA <<< "$API_OUT"
+          if [ -z "$LAST_ID" ] || [ "$LAST_ID" = "null" ]; then
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+            echo "reason=no-previous-successful-run" >> "$GITHUB_OUTPUT"
+            echo "No previous successful run — full rebuild."
+            exit 0
+          fi
+          # The squashfs must exist as an artifact on that run (runs from
+          # before this optimization have only the APK artifact).
+          ARTIFACT_ID=$(gh api \
+            "repos/${{ github.repository }}/actions/runs/$LAST_ID/artifacts" \
+            --jq '.artifacts[] | select(.name == "arch-rootfs-squashfs") | .id' \
+            2>/dev/null | head -1 || true)
+          if [ -z "$ARTIFACT_ID" ]; then
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+            echo "reason=no-reusable-squashfs-artifact" >> "$GITHUB_OUTPUT"
+            echo "Run $LAST_ID has no squashfs artifact — full rebuild."
+            exit 0
+          fi
+          # Rebuild only if the rootfs inputs changed: the build scripts,
+          # systemd units, helpers, Dockerfile, or this workflow itself.
+          # Anything else (app code, docs) reuses the previous squashfs.
+          if git diff --quiet "$LAST_SHA" HEAD -- \
+                build-rootfs/ .github/workflows/build-apk.yml 2>/dev/null; then
+            echo "rebuild=false" >> "$GITHUB_OUTPUT"
+            echo "reuse_run_id=$LAST_ID" >> "$GITHUB_OUTPUT"
+            echo "reason=rootfs-inputs-unchanged" >> "$GITHUB_OUTPUT"
+            echo "Rootfs inputs unchanged since run $LAST_ID — reusing its squashfs."
+          else
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+            echo "reason=rootfs-inputs-changed" >> "$GITHUB_OUTPUT"
+            echo "Rootfs inputs changed — full rebuild."
+            git diff --name-only "$LAST_SHA" HEAD -- \
+              build-rootfs/ .github/workflows/build-apk.yml | head -10
+          fi
 
       - name: Free disk space
         uses: jlumbroso/free-disk-space@v1.3.1
@@ -84,19 +152,72 @@ jobs:
           echo '--- assets ---' && ls -la "$ASSETS"
           echo '--- jniLibs ---' && ls -la "$JNILIBS"
 
+      # ── box64 package cache (skips the ~1.5h AUR compile) ───────────────
+      - name: Get box64 AUR HEAD (cache key)
+        id: box64-ver
+        if: steps.rootfs-check.outputs.rebuild == 'true'
+        run: |
+          set -euo pipefail
+          SHA=$(git ls-remote https://aur.archlinux.org/box64.git HEAD | cut -f1)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "box64 AUR HEAD: $SHA"
+
+      - name: Restore box64 package cache
+        if: steps.rootfs-check.outputs.rebuild == 'true'
+        uses: actions/cache@v4
+        with:
+          path: build-rootfs/box64-prebuilt.pkg.tar.zst
+          # Keyed on the AUR HEAD: a new upstream box64 release misses the
+          # cache and gets compiled once, then cached under the new key.
+          key: box64-${{ steps.box64-ver.outputs.sha }}
+
+      - name: Ensure box64 placeholder for Docker build
+        if: steps.rootfs-check.outputs.rebuild == 'true'
+        run: |
+          set -euo pipefail
+          # actions/cache only creates the file on a hit; the Dockerfile COPY
+          # needs it to exist, so ensure an (empty) file on a miss.
+          # build-rootfs.sh treats an empty/invalid file as "no cache".
+          touch build-rootfs/box64-prebuilt.pkg.tar.zst
+          ls -la build-rootfs/box64-prebuilt.pkg.tar.zst
+
       - name: Build Arch Linux ARM rootfs
+        if: steps.rootfs-check.outputs.rebuild == 'true'
         run: |
           set -euo pipefail
           SYSVER=$(grep -E '^[[:space:]]*versionCode[[:space:]]*=' \
             app/build.gradle.kts | grep -oE '[0-9]+' | head -1)
           echo "SYSTEM_VERSION=${SYSVER:-0}"
+          OUT="$GITHUB_WORKSPACE/.rootfs-out"
+          rm -rf "$OUT" && mkdir -p "$OUT"
           docker buildx build \
             -f build-rootfs/Dockerfile.rootfs \
             -t ardroid-rootfs:latest \
             --build-arg "SYSTEM_VERSION=${SYSVER:-0}" \
-            --output "type=local,dest=$GITHUB_WORKSPACE/app/src/main/assets" \
+            --output "type=local,dest=$OUT" \
             build-rootfs/
+          ls -la "$OUT"
+          # Only the squashfs goes into the APK assets; the box64 package
+          # feeds back into the actions/cache for the next build.
+          cp "$OUT/arch-rootfs.squashfs" "$GITHUB_WORKSPACE/app/src/main/assets/"
+          cp "$OUT/box64.pkg.tar.zst" \
+             "$GITHUB_WORKSPACE/build-rootfs/box64-prebuilt.pkg.tar.zst"
           ls -la "$GITHUB_WORKSPACE/app/src/main/assets/arch-rootfs.squashfs"
+
+      - name: Reuse previous rootfs squashfs
+        if: steps.rootfs-check.outputs.rebuild == 'false'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ steps.rootfs-check.outputs.reuse_run_id }}
+          name: arch-rootfs-squashfs
+          path: app/src/main/assets/
+
+      - name: Verify rootfs squashfs present
+        run: |
+          set -euo pipefail
+          ls -la "$GITHUB_WORKSPACE/app/src/main/assets/arch-rootfs.squashfs"
+          test -s "$GITHUB_WORKSPACE/app/src/main/assets/arch-rootfs.squashfs"
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -130,4 +251,13 @@ jobs:
         with:
           name: ardroid-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      # Always upload the squashfs so the NEXT run can reuse it when the
+      # rootfs inputs haven't changed (keeps the reuse chain alive).
+      - name: Upload rootfs squashfs (for future rebuild-skip)
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-rootfs-squashfs
+          path: app/src/main/assets/arch-rootfs.squashfs
           if-no-files-found: error
