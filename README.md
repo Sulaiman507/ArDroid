@@ -46,14 +46,14 @@ ArDroid is a fork of [Podroid](https://github.com/ExTV/Podroid) that swaps the A
 | Package manager | `apk` | `pacman` |
 | Init system | OpenRC | `systemd` |
 | x86_64 binaries | — | `box64` pre-installed |
-| Default login | `root` / `podroid` | `root` / `ardroid` |
+| Default login | `root` / `podroid` | `root` / `root` |
 
 The kernel and initramfs are reused from Podroid (prebuilt); only the root filesystem is Arch.
 
 ## Quick start
 
 1. Download the APK from the latest successful [*Build ArDroid APK (cloud)*](https://github.com/Sulaiman507/ArDroid/actions) run and install it.
-2. Tap **Start VM**, wait for **Ready!**, open the terminal and log in as `root` (password: `ardroid`).
+2. Tap **Start VM**, wait for **Ready!**, open the terminal and log in as `root` (password: `root`).
 
 ```sh
 # rootless containers, straight away
@@ -69,7 +69,7 @@ curl http://<phone-ip>:8080
 podroid-forward clean                 # remove every rule you added, in one go
 
 # SSH in from your laptop (enable SSH in the setup wizard or Settings)
-ssh root@<phone-ip> -p 9922        # password: ardroid
+ssh root@<phone-ip> -p 9922        # password: root
 ```
 
 ## Build

@@ -141,8 +141,10 @@ mkdir -p "$ROOTFS/etc/sudoers.d"
 echo "%wheel ALL=(ALL) ALL" > "$ROOTFS/etc/sudoers.d/wheel"
 chmod 0440 "$ROOTFS/etc/sudoers.d/wheel"
 
-# ── root password "ardroid" (pre-hashed; openssl makes a random salt) ─────────
-ROOT_HASH=$(openssl passwd -6 ardroid)
+# ── root password "root" (pre-hashed; openssl makes a random salt) ─────────────
+# NOTE: intentionally simple — the user asked for it (was "ardroid").
+# Change it anytime inside the guest with `passwd`.
+ROOT_HASH=$(openssl passwd -6 root)
 sed -i "s|^root:[^:]*:|root:${ROOT_HASH}:|" "$ROOTFS/etc/shadow"
 
 # ── locale ───────────────────────────────────────────────────────────────────
@@ -181,12 +183,29 @@ cat > "$ROOTFS/etc/issue" <<'EOF'
 Welcome to ArDroid (Arch Linux ARM)
 Kernel \r on \m (\l)
 
-  Default login:  root  /  ardroid
+  Default login:  root  /  root
   Change root password:    passwd
   Create a regular user:   useradd -m -G wheel <name>
                            (wheel group → can run sudo/doas)
 
 EOF
+
+# ── post-login welcome (shown by every login shell) ──────────────────────────
+# The getty banner (/etc/issue) was unreliable on the phone terminal, so the
+# welcome is printed here instead — guaranteed visible right after login.
+cat > "$ROOTFS/etc/profile.d/ardroid-welcome.sh" <<'EOF'
+# ArDroid welcome banner (login shells only)
+if [ -z "$ARDROID_WELCOME_SHOWN" ]; then
+    export ARDROID_WELCOME_SHOWN=1
+    printf '\n  Welcome to \033[1mArDroid\033[0m (Arch Linux ARM)\n'
+    printf '  %-22s %s\n' "Update system:" "pacman -Syu"
+    printf '  %-22s %s\n' "Run x86_64 binaries:" "box64 ./program"
+    printf '  %-22s %s\n' "Containers:" "podman / docker / lxc"
+    printf '  %-22s %s\n' "Change root password:" "passwd"
+    printf '\n'
+fi
+EOF
+chmod 644 "$ROOTFS/etc/profile.d/ardroid-welcome.sh"
 
 # ── podroid helper scripts (portable sh; unchanged from Podroid) ─────────────
 mkdir -p "$ROOTFS/usr/local/bin"
