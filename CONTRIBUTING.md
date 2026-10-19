@@ -2,7 +2,7 @@
 
 Thanks for considering a contribution. Bug reports, feature requests, and pull requests are all welcome.
 
-Before you start, please skim [`CLAUDE.md`](CLAUDE.md). It documents the VM-engine abstraction and both backends, the boot pipeline, every native binary, and the design quirks you need to know to make changes that don't regress.
+Before you start, please skim [`AGENTS.md`](AGENTS.md). It documents the VM-engine abstraction and both backends, the boot pipeline, every native binary, and the design quirks you need to know to make changes that don't regress.
 
 ## Getting started
 
@@ -84,13 +84,13 @@ If your change touches the engine boundary or AVF, note that the two backends ne
 adb shell pm list features | grep virtualization
 ```
 
-See [Proving a change on a device](CLAUDE.md#proving-a-change-on-a-device) for the grant sequence and which backend needs which device. **Say in the PR which backends you actually tested on.** Backend asymmetry is the most common source of bugs here, so a QEMU-only test is the easiest way to ship a regression.
+See [Proving a change on a device](AGENTS.md#proving-a-change-on-a-device) for the grant sequence and which backend needs which device. **Say in the PR which backends you actually tested on.** Backend asymmetry is the most common source of bugs here, so a QEMU-only test is the easiest way to ship a regression.
 
 **Add both translations for any user-facing string.** Every string needs an entry in `app/src/main/res/values/strings.xml` and `app/src/main/res/values-zh/strings.xml`, and must be referenced with `stringResource`. Do not hardcode user-facing text.
 
 **Never rename a DataStore key without a migration.** Saved user state has to survive every release, since updates install in place. The Kotlin identifier is free to change, but the string literal is an on-disk contract: renaming it orphans the stored value and the setting silently reverts to its default on the user's next launch. `DataStoreKeyContractTest` will fail if you change one. If the rename is deliberate, ship a migration that reads the old key and writes the new one, and update the expectation in the same commit.
 
-**Update the docs your change affects.** If it is user-facing, update [`README.md`](README.md). If it changes the architecture, boot pipeline, terminal layer, or kernel options, update [`CLAUDE.md`](CLAUDE.md) too.
+**Update the docs your change affects.** If it is user-facing, update [`README.md`](README.md). If it changes the architecture, boot pipeline, terminal layer, or kernel options, update [`AGENTS.md`](AGENTS.md) too.
 
 ### Commit messages
 
