@@ -1,4 +1,4 @@
-# Contributing to Podroid
+# Contributing to ArDroid
 
 Thanks for considering a contribution. Bug reports, feature requests, and pull requests are all welcome.
 
@@ -7,39 +7,27 @@ Before you start, please skim [`AGENTS.md`](AGENTS.md). It documents the VM-engi
 ## Getting started
 
 ```sh
-git clone https://github.com/ExTV/Podroid.git
-cd Podroid
+git clone https://github.com/Sulaiman507/ArDroid.git
+cd ArDroid
 ```
 
 You will need:
 
-- **Docker 20.10+** for the kernel, initramfs, rootfs, and QEMU build pipelines
-- **Android NDK r27c** for the bridge and Termux native libraries
-- **Android SDK** with platform 36 + build-tools
+- **Android SDK** with platform 36 + build-tools (for the APK)
+- **Docker 20.10+** with ARM emulation (for the Arch rootfs build - normally done via CI)
 - An **arm64 Android device** running **Android 8.0+ (API 26)** for testing
 
 ## Build pipeline
 
-`build-all.sh` orchestrates every component:
-
-```sh
-./build-all.sh kernel       # custom Linux kernel (~5-10 min, Docker-cached)
-./build-all.sh initramfs    # kernel + minimal initramfs
-./build-all.sh rootfs       # Alpine squashfs (~30 s, Docker-cached)
-./build-all.sh qemu         # QEMU + podroid-bridge (~30 min first run)
-./build-all.sh apk          # Android APK via Gradle
-./build-all.sh all          # everything
-./build-all.sh deploy       # APK + install in place (adb install -r)
-./build-all.sh test         # deploys APK, polls console.log for "Ready!"
-```
+Builds run in the cloud via GitHub Actions (`.github/workflows/build-apk.yml`, workflow_dispatch): the workflow reuses Podroid's prebuilt kernel/initramfs/QEMU, builds only the Arch rootfs via Docker, then Gradle `assembleDebug`. See `AGENTS.md` for details.
 
 Component versions are pinned in one place each, so read the pin rather than trusting a number written in prose:
 
 | Component | Pinned in |
 |---|---|
-| Linux kernel | `podroidKernelVersion` in `gradle.properties` |
-| QEMU | `podroidQemuVersion` in `gradle.properties` |
-| Alpine | `ARG ALPINE_RELEASE` in `build-rootfs/Dockerfile.rootfs` |
+| Linux kernel | prebuilt `vmlinuz-virt` (reused from Podroid; repo kernel configs are inert) |
+| QEMU | prebuilt `.so` (reused from Podroid) |
+| Arch Linux ARM | upstream tarball URL in `build-rootfs/Dockerfile.rootfs` |
 
 Or, for the common case where you only changed Kotlin / UI code:
 
@@ -117,7 +105,7 @@ Avoid `fixes #N` or `closes #N` unless you intend the issue to close when the co
 ## Project layout
 
 ```
-Podroid/
+ArDroid/
 ├── app/                                  Android application (Jetpack Compose, Hilt)
 │   └── src/main/
 │       ├── java/com/excp/podroid/
@@ -139,21 +127,19 @@ Podroid/
 │       ├── jniLibs/arm64-v8a/            QEMU, podroid-bridge, podroid-launcher, libslirp
 │       └── assets/                       kernel, initramfs, squashfs, fonts, themes
 ├── terminal-view/, terminal-emulator/    vendored Termux fork (local Gradle modules)
-├── init-podroid                          Minimal initramfs script (~45 lines)
+├── init-podroid                          initramfs bootstrap (prebuilt; repo copy is reference only)
 ├── podroid-bridge.c                      Native PTY <-> virtio-console relay
 ├── podroid-launcher.c                    exec wrapper tying QEMU's lifetime to the app
-├── Dockerfile                            Kernel + initramfs + QEMU build pipeline
-├── build-tools/                          Static assets used during Docker builds
-│   └── cross-android-aarch64.ini         Meson cross-compilation config
-├── build-rootfs/                         Alpine squashfs build pipeline
+├── build-rootfs/                         Arch Linux ARM squashfs build pipeline
 │   ├── Dockerfile.rootfs
-│   ├── build-rootfs.sh
+│   ├── build-rootfs.sh                   (includes box64 AUR build)
 │   ├── vsock-agent/                      AVF control/forward agent
 │   ├── host-bridge/                      guest to Android bridge daemon
-│   └── files/                            OpenRC services baked into the squashfs
-├── build-all.sh                          Unified build / deploy script
-├── podroid_kernel.config                 Custom kernel Kconfig fragment
-└── docs/                                 GitHub Pages site
+│   └── files/                            systemd units + helpers baked into the squashfs
+│       ├── etc/systemd/system/           12 podroid-*.service units
+│       └── usr/local/bin/                podroid-getty, podroid-login, ...
+├── .github/workflows/build-apk.yml      Cloud build: rootfs via Docker + assembleDebug
+└── docs/                                 GitHub Pages site (upstream Podroid docs)
 ```
 
 ## License

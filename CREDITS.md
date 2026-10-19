@@ -1,6 +1,6 @@
 # Credits & Acknowledgements
 
-Podroid stands on the shoulders of an enormous amount of open-source work. The list below covers the upstream projects whose code, designs, fonts, or themes are shipped inside the APK, along with the major Android-side dependencies. Every component remains under its own upstream license; see [LICENSE](LICENSE) for Podroid's own license (GPL v2.0).
+ArDroid stands on the shoulders of an enormous amount of open-source work. The list below covers the upstream projects whose code, designs, fonts, or themes are shipped inside the APK, along with the major Android-side dependencies. Every component remains under its own upstream license; see [LICENSE](LICENSE) for ArDroid's own license (GPL v2.0).
 
 If something you maintain is included here and we missed you, please open an issue or a pull request and we will fix it.
 
@@ -8,20 +8,26 @@ If something you maintain is included here and we missed you, please open an iss
 
 ## Virtual machine stack
 
-These projects make up the actual Linux system that runs inside Podroid.
+These projects make up the actual Linux system that runs inside ArDroid.
 
 ### Linux kernel
-Podroid ships a custom build of the upstream Linux kernel (currently 7.1.5) configured specifically for OCI-compatible containers under QEMU TCG.
+ArDroid reuses Podroid's prebuilt Linux kernel (`vmlinuz-virt`), configured for OCI-compatible containers under QEMU TCG.
 
 - Project: https://kernel.org
 - License: GNU General Public License v2.0
 - Maintainers: Linus Torvalds and the Linux kernel community
 
-### Alpine Linux
-The guest userspace is a slightly customized Alpine Linux 3.24 root filesystem.
+### Arch Linux ARM
+The guest userspace is Arch Linux ARM (aarch64), built from the upstream tarball with additional packages via pacman.
 
-- Project: https://alpinelinux.org
-- License: per-package (see Alpine's individual package licenses)
+- Project: https://archlinuxarm.org
+- License: per-package (see Arch's individual package licenses)
+
+### box64
+The x86_64 userspace emulator pre-installed in the guest, built from source.
+
+- Project: https://github.com/ptitSeb/box64
+- License: MIT
 
 ### Container runtimes
 The full rootless OCI stack ships pre-installed and pre-configured. Docker and LXC are bundled alongside Podman for users who prefer them.
@@ -41,25 +47,25 @@ The full rootless OCI stack ships pre-installed and pre-configured. Docker and L
 All maintained by the containers community; primarily Apache-2.0 / GPL-2.0 licensed.
 
 ### System & init
-- **busybox**: multi-call binary providing the initramfs userland and `/sbin/init` (https://busybox.net, GPL-2.0)
-- **OpenRC**: service manager running as PID 1 inside the VM (https://github.com/OpenRC/openrc, BSD-2-Clause)
+- **systemd**: service manager running as PID 1 inside the VM (https://systemd.io, LGPL-2.1+)
 - **Dropbear SSH**: small SSH server (https://matt.ucc.asn.au/dropbear/dropbear.html, MIT-style)
 - **doas / sudo**: privilege escalation for `wheel`-group users (OpenBSD / https://www.sudo.ws)
-- **iproute2, iptables, nftables, bridge-utils**: networking utilities maintained by netfilter.org and the Linux community
+- **iproute2, iptables, nftables**: networking utilities maintained by netfilter.org and the Linux community
+- **busybox**: multi-call binary providing the (Alpine-based) initramfs userland (https://busybox.net, GPL-2.0)
 
 ### X11 desktop stack
-The in-app X11 viewer is backed by these components running inside the VM. Podroid's Android side speaks RFB 3.8 directly (no third-party VNC client) and decodes the audio stream natively.
+The in-app X11 viewer is backed by these components running inside the VM. ArDroid's Android side speaks RFB 3.8 directly (no third-party VNC client) and decodes the audio stream natively.
 
 - **TigerVNC** (`Xvnc`): combined X server + RFB server (https://tigervnc.org, GPL-2.0)
 - **PulseAudio**: audio server, exposing a null-sink monitor over `module-simple-protocol-tcp` (https://www.freedesktop.org/wiki/Software/PulseAudio/, LGPL-2.1)
-- **font-misc-misc, font-cursor-misc, ttf-dejavu**: minimum X11 fonts so apps render correctly out of the box
+- **font-misc-misc, ttf-dejavu**: minimum X11 fonts so apps render correctly out of the box
 
 ---
 
 ## Emulation
 
 ### QEMU
-QEMU provides the machine emulation that makes everything else possible. Podroid currently builds against QEMU 11.0.4, cross-compiled for arm64 Android.
+QEMU provides the machine emulation that makes everything else possible. ArDroid reuses Podroid's QEMU build, cross-compiled for arm64 Android.
 
 - Project: https://www.qemu.org
 - Repository: https://gitlab.com/qemu-project/qemu
@@ -98,7 +104,7 @@ The terminal layer (xterm-256color emulator, escape-sequence parsing, mouse trac
 - Maintainers: Fredrik Fornwall and the Termux community
 
 ### Color themes
-Podroid ships 122 terminal color schemes covering most of the popular ecosystem (Dracula, Nord, Solarized, Tokyo Night, Catppuccin, Gruvbox, Monokai, the base16 family, and more). The themes are sourced from the [**Gogh**](https://github.com/Gogh-Co/Gogh) project's curated collection (MIT). Individual color palette designers are credited within each `.properties` file.
+ArDroid ships 122 terminal color schemes covering most of the popular ecosystem (Dracula, Nord, Solarized, Tokyo Night, Catppuccin, Gruvbox, Monokai, the base16 family, and more). The themes are sourced from the [**Gogh**](https://github.com/Gogh-Co/Gogh) project's curated collection (MIT). Individual color palette designers are credited within each `.properties` file.
 
 ### Bundled fonts
 
@@ -133,16 +139,16 @@ Podroid ships 122 terminal color schemes covering most of the popular ecosystem 
 ### Build toolchain
 - **Android Gradle Plugin, Android SDK, Android NDK r27c** by Google LLC
 - **Gradle** by Gradle, Inc. (Apache-2.0)
-- **Docker** for the cross-build pipelines used by the kernel, initramfs, rootfs, and QEMU stages
+- **Docker** for the rootfs cross-build pipeline (run in CI)
 
 ---
 
-## Podroid
+## ArDroid
 
-Podroid itself is developed by **[ExTV](https://github.com/ExTV)** and contributors.
+ArDroid is developed by **[سليمان](https://github.com/Sulaiman507)** and contributors, as a fork of **[Podroid](https://github.com/ExTV/Podroid)** by **[ExTV](https://github.com/ExTV)** (the app layer, VM engines, and terminal are Podroid's work, reused under GPL-2.0).
 
-- Repository: https://github.com/ExTV/Podroid
-- Website: https://extv.github.io/Podroid/
+- Repository: https://github.com/Sulaiman507/ArDroid
+- Upstream: https://github.com/ExTV/Podroid
 - License: GNU General Public License v2.0 (or later)
 
 If you have contributed code, themes, fonts, or bug reports and would like to be listed here, please open an issue or a pull request.
@@ -151,4 +157,4 @@ If you have contributed code, themes, fonts, or bug reports and would like to be
 
 ## Reporting missing or incorrect attribution
 
-We take attribution seriously. If you believe your work is shipped in Podroid but not properly credited, or if any information above is incorrect, please [open an issue](https://github.com/ExTV/Podroid/issues/new) and we will get it fixed quickly.
+We take attribution seriously. If you believe your work is shipped in ArDroid but not properly credited, or if any information above is incorrect, please [open an issue](https://github.com/Sulaiman507/ArDroid/issues/new) and we will get it fixed quickly.
