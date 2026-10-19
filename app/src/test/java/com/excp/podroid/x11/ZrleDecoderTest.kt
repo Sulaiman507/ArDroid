@@ -1,8 +1,8 @@
 /*
- * Podroid - Rootless Podman for Android
- * Copyright (C) 2024-2026 Podroid contributors
+ * ArDroid - Rootless Podman for Android
+ * Copyright (C) 2024-2026 ArDroid contributors
  */
-package com.excp.podroid.x11
+package com.ardroid.app.x11
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows

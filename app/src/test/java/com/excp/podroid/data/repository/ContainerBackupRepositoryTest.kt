@@ -1,4 +1,4 @@
-package com.excp.podroid.data.repository
+package com.ardroid.app.data.repository
 
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -14,7 +14,7 @@ class ContainerBackupRepositoryTest {
 
     @Test
     fun createsMissingBackupDirectoryAndParents() {
-        val dir = File(temporaryFolder.root, "Podroid/backups")
+        val dir = File(temporaryFolder.root, "ArDroid/backups")
 
         assertTrue(ContainerBackupRepository.ensureBackupDirectory(dir))
         assertTrue(dir.isDirectory)
@@ -40,7 +40,7 @@ class ContainerBackupRepositoryTest {
 
     @Test
     fun rejectsFileInParentPath() {
-        val parent = temporaryFolder.newFile("Podroid").apply { writeText("keep") }
+        val parent = temporaryFolder.newFile("ArDroid").apply { writeText("keep") }
 
         assertFalse(ContainerBackupRepository.ensureBackupDirectory(File(parent, "backups")))
         assertEquals("keep", parent.readText())

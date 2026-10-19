@@ -1,4 +1,4 @@
-package com.excp.podroid.x11
+package com.ardroid.app.x11
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

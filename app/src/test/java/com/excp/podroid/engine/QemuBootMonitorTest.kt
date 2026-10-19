@@ -1,8 +1,8 @@
 /*
- * Podroid - Rootless Podman for Android
- * Copyright (C) 2024-2026 Podroid contributors
+ * ArDroid - Rootless Podman for Android
+ * Copyright (C) 2024-2026 ArDroid contributors
  */
-package com.excp.podroid.engine
+package com.ardroid.app.engine
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals

@@ -1,17 +1,17 @@
 /*
- * Podroid - Rootless Podman for Android
- * Copyright (C) 2024-2026 Podroid contributors
+ * ArDroid - Rootless Podman for Android
+ * Copyright (C) 2024-2026 ArDroid contributors
  *
  * Unit tests for ControlProvider's pure logic: caller authorization, method+
  * arg parsing, VmState -> literal mapping, and state reply formatting. Plain
  * JVM, no Robolectric - none of the code under test touches Android classes.
  */
-package com.excp.podroid.engine.control
+package com.ardroid.app.engine.control
 
-import com.excp.podroid.data.repository.PortForwardRule
-import com.excp.podroid.engine.EngineSelection
-import com.excp.podroid.engine.VmState
-import com.excp.podroid.ui.navigation.Routes
+import com.ardroid.app.data.repository.PortForwardRule
+import com.ardroid.app.engine.EngineSelection
+import com.ardroid.app.engine.VmState
+import com.ardroid.app.ui.navigation.Routes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

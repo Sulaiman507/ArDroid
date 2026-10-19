@@ -1,6 +1,6 @@
-package com.excp.podroid.engine.avf
+package com.ardroid.app.engine.avf
 
-import com.excp.podroid.data.repository.PortForwardRule
+import com.ardroid.app.data.repository.PortForwardRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test

@@ -1,10 +1,10 @@
-package com.excp.podroid.engine.hostbridge
+package com.ardroid.app.engine.hostbridge
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
-import com.excp.podroid.data.repository.AddRuleResult
-import com.excp.podroid.data.repository.PortForwardRule
+import com.ardroid.app.data.repository.AddRuleResult
+import com.ardroid.app.data.repository.PortForwardRule
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 
@@ -60,10 +60,10 @@ class HostRequestDispatcherTest {
     @Test fun notifyPostsAndReturnsId() = runBlocking {
         val poster = FakePoster()
         val d = dispatcher(poster)
-        val resp = d.handle("NOTIFY high 42 ${HostProtocol.enc("Podroid")} ${HostProtocol.enc("done")}")
+        val resp = d.handle("NOTIFY high 42 ${HostProtocol.enc("ArDroid")} ${HostProtocol.enc("done")}")
         assertEquals("OK 42", resp)
         assertEquals(1, poster.posts.size)
-        assertEquals("Podroid", poster.posts[0].title)
+        assertEquals("ArDroid", poster.posts[0].title)
         assertEquals("done", poster.posts[0].body)
         assertEquals(HostProtocol.PRIO_HIGH, poster.posts[0].priority)
         assertEquals(42, poster.posts[0].id)

@@ -1,8 +1,8 @@
 /*
- * Podroid - Rootless Podman for Android
- * Copyright (C) 2024-2026 Podroid contributors
+ * ArDroid - Rootless Podman for Android
+ * Copyright (C) 2024-2026 ArDroid contributors
  */
-package com.excp.podroid.ui.screens.terminal
+package com.ardroid.app.ui.screens.terminal
 
 import android.view.KeyEvent
 import org.junit.Assert.assertEquals

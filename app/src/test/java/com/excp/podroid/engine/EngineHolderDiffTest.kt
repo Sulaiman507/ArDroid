@@ -1,11 +1,11 @@
 /*
- * Podroid - Rootless Podman for Android
- * Copyright (C) 2024-2026 Podroid contributors
+ * ArDroid - Rootless Podman for Android
+ * Copyright (C) 2024-2026 ArDroid contributors
  */
-package com.excp.podroid.engine
+package com.ardroid.app.engine
 
-import com.excp.podroid.data.repository.PortForwardRule
-import com.excp.podroid.engine.EngineHolder.Companion.computeRuleDiff
+import com.ardroid.app.data.repository.PortForwardRule
+import com.ardroid.app.engine.EngineHolder.Companion.computeRuleDiff
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -84,7 +84,7 @@ class EngineHolderDiffTest {
 
     @Test
     fun `implicit always-on forwards are never removed`() {
-        // SSH/VNC/audio are injected into the launch set by PodroidService but
+        // SSH/VNC/audio are injected into the launch set by ArDroidService but
         // never persisted to the DataStore, so they appear in launchRules yet
         // not in `rules`. The diff loop folds them back in (desired = rules +
         // implicit) so they are never computed as removed. Without that fold the

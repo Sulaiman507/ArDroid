@@ -1,6 +1,6 @@
-package com.excp.podroid.engine.avf
+package com.ardroid.app.engine.avf
 
-import com.excp.podroid.engine.avf.AvfCapabilities.ProtectedVmChoice
+import com.ardroid.app.engine.avf.AvfCapabilities.ProtectedVmChoice
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

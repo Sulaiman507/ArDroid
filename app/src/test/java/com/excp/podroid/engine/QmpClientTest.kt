@@ -1,12 +1,12 @@
 /*
- * Podroid - Rootless Podman for Android
- * Copyright (C) 2024-2026 Podroid contributors
+ * ArDroid - Rootless Podman for Android
+ * Copyright (C) 2024-2026 ArDroid contributors
  */
-package com.excp.podroid.engine
+package com.ardroid.app.engine
 
-import com.excp.podroid.engine.QmpClient.Companion.QmpVerdict
-import com.excp.podroid.engine.QmpClient.Companion.classifyQmpFields
-import com.excp.podroid.engine.QmpClient.Companion.readQmpResponse
+import com.ardroid.app.engine.QmpClient.Companion.QmpVerdict
+import com.ardroid.app.engine.QmpClient.Companion.classifyQmpFields
+import com.ardroid.app.engine.QmpClient.Companion.readQmpResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

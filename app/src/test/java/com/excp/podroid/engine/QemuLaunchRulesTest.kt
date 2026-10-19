@@ -1,12 +1,12 @@
 /*
- * Podroid - Rootless Podman for Android
- * Copyright (C) 2024-2026 Podroid contributors
+ * ArDroid - Rootless Podman for Android
+ * Copyright (C) 2024-2026 ArDroid contributors
  */
-package com.excp.podroid.engine
+package com.ardroid.app.engine
 
-import com.excp.podroid.data.repository.PortForwardRule
-import com.excp.podroid.engine.QemuEngine.Companion.inlineLaunchRules
-import com.excp.podroid.x11.X11Constants
+import com.ardroid.app.data.repository.PortForwardRule
+import com.ardroid.app.engine.QemuEngine.Companion.inlineLaunchRules
+import com.ardroid.app.x11.X11Constants
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

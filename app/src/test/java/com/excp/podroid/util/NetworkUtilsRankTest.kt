@@ -1,12 +1,12 @@
 /*
- * Podroid - Rootless Podman for Android
- * Copyright (C) 2024-2026 Podroid contributors
+ * ArDroid - Rootless Podman for Android
+ * Copyright (C) 2024-2026 ArDroid contributors
  *
  * Ordering rules for the device's reachable IPv4 addresses.
  */
-package com.excp.podroid.util
+package com.ardroid.app.util
 
-import com.excp.podroid.util.NetworkUtils.LocalAddress
+import com.ardroid.app.util.NetworkUtils.LocalAddress
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

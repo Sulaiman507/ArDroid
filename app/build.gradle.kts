@@ -14,7 +14,7 @@ plugins {
 val podroidQemuVersion = providers.gradleProperty("podroidQemuVersion").get()
 
 android {
-    namespace = "com.excp.podroid"
+    namespace = "com.ardroid.app"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -22,7 +22,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.excp.podroid"
+        applicationId = "com.ardroid.app"
         minSdk = 26
         targetSdk = 36
         versionCode = 33

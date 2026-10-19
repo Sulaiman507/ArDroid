@@ -1,10 +1,10 @@
 /*
- * Podroid - Rootless Podman for Android
- * Copyright (C) 2024-2026 Podroid contributors
+ * ArDroid - Rootless Podman for Android
+ * Copyright (C) 2024-2026 ArDroid contributors
  *
  * Unit tests for PortForwardRule pure logic and dedup helper.
  */
-package com.excp.podroid.data.repository
+package com.ardroid.app.data.repository
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
