@@ -217,6 +217,9 @@ The terminal emulator JNI is built from the vendored `terminal-emulator` module 
 ## Build pipelines
 
 - **`.github/workflows/build-apk.yml`** (the real build): downloads the Podroid v1.2.9 release APK, extracts the prebuilt `vmlinuz-virt`/`initrd.img`/QEMU `.so`, builds the Arch rootfs with Docker (emulated aarch64), then Gradle `assembleDebug`. Artifact: `ardroid-debug-apk`.
+- **Build speedups** (both automatic, both fall back to a full rebuild on any doubt):
+  - *Rootfs reuse:* if `build-rootfs/` and the workflow file are unchanged since the last successful run, the `arch-rootfs.squashfs` is downloaded from that run's `arch-rootfs-squashfs` artifact instead of rebuilding (~15 min vs ~3h). Every run re-uploads the squashfs to keep the chain alive.
+  - *box64 package cache:* `actions/cache` keyed on the AUR HEAD sha; `build-rootfs.sh` installs `/build/box64-prebuilt.pkg.tar.zst` when valid, else compiles from the AUR and exports the package for the next run (~1.5h saved).
 - **`build-rootfs/Dockerfile.rootfs`** - fetches the Arch Linux ARM aarch64 tarball, runs `build-rootfs.sh`: `pacman -Syu` (base + systemd + podman + docker + lxc + dropbear + openssh + tigervnc + pulseaudio + ...), builds **box64 from the AUR** as a throwaway `builder` user (build deps installed `--asdeps`, orphan-swept after; `sudo`/`gzip` re-marked `--asexplicit` so the sweep can't remove them), writes `/etc/issue` + `/etc/profile.d/ardroid-welcome.sh`, sets the root password hash, installs the 12 systemd units + helpers, then `mksquashfs -comp zstd`. A build-time check `unsquashfs -l`s the image and **fails the build** if `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, or `/usr/bin/box64` are missing.
 - The local `Dockerfile` / `build-all.sh` kernel+QEMU stages are **legacy** - the kernel and QEMU are prebuilt and reused; do not spend time on kernel configs.
 
