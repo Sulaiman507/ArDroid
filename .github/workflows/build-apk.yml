@@ -158,7 +158,11 @@ jobs:
         if: steps.rootfs-check.outputs.rebuild == 'true'
         run: |
           set -euo pipefail
-          SHA=$(git ls-remote https://aur.archlinux.org/box64.git HEAD | cut -f1)
+          # NOTE: ls-remote can print multiple lines for HEAD (symref +
+          # target); take the first line only, or GITHUB_OUTPUT gets a
+          # bare-SHA line and rejects it ("Invalid format").
+          SHA=$(git ls-remote https://aur.archlinux.org/box64.git HEAD \
+                | head -1 | cut -f1 | tr -d '[:space:]')
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "box64 AUR HEAD: $SHA"
 
