@@ -1,129 +1,209 @@
 #!/bin/sh
+# ArDroid rootfs builder — Arch Linux ARM (aarch64) + systemd.
+# Runs INSIDE the Dockerfile builder stage whose filesystem (/) IS the
+# Arch rootfs, so ROOTFS=/ and pacman runs natively (aarch64, emulated via
+# qemu-user-static binfmt on x86_64 hosts).
 set -eu
-ROOTFS=/work/rootfs
+ROOTFS=/
 
-# ALPINE_VERSION comes from the Dockerfile ENV (full release like 3.24.1).
-# Strip the patch component to get the major branch (e.g. 3.24) used in repo URLs.
-: "${ALPINE_VERSION:?ALPINE_VERSION must be set (e.g. 3.24.1)}"
-ALPINE_BRANCH="${ALPINE_VERSION%.*}"
+# ── pacman sandbox ───────────────────────────────────────────────────────────
+# pacman 7+ sandboxes package downloads with Landlock; qemu-user/Docker
+# kernels (e.g. GitHub Actions runners) often lack Landlock, which makes
+# every pacman download fail ("restricting filesystem access failed").
+# This is a throwaway builder container, so disable the sandbox.
+# (Removed again after the pacman run below — the shipped guest keeps
+# pacman's default sandboxing.)
+PACMAN_SANDBOX_DISABLED=0
+if ! grep -q '^DisableSandbox' /etc/pacman.conf; then
+    sed -i 's/^\[options\]$/[options]\nDisableSandbox/' /etc/pacman.conf
+    PACMAN_SANDBOX_DISABLED=1
+fi
 
-mkdir -p "$ROOTFS/etc/apk"
-cat > "$ROOTFS/etc/apk/repositories" <<EOF
-https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_BRANCH}/main
-https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_BRANCH}/community
-EOF
+# ── neuter hooks that need a live systemd ────────────────────────────────────
+# Most hooks go through /usr/share/libalpm/scripts/systemd-hook, which
+# skips gracefully when systemd is not PID 1. A few call /usr/bin/systemctl
+# DIRECTLY by absolute path instead — e.g. openssh's
+# 10-openssh-mark-sshd-for-restart.hook ("Marking sshd.service for
+# restart...") — and abort the whole transaction inside this builder
+# container, where systemd can never be PID 1. Move such hooks aside for
+# the pacman run (NoExtract keeps upgrades from reinstalling them), then
+# restore everything afterwards so the shipped guest is pristine.
+HOOKS_NEUTERED=""
+mkdir -p /build/hooks-disabled
+for hook in /usr/share/libalpm/hooks/*.hook; do
+    [ -e "$hook" ] || continue
+    if grep -qE '^Exec = /usr/bin/systemctl' "$hook"; then
+        base="usr/share/libalpm/hooks/$(basename "$hook")"
+        mv "$hook" /build/hooks-disabled/
+        echo "NoExtract = $base" >> /etc/pacman.conf
+        HOOKS_NEUTERED="$HOOKS_NEUTERED$base;"
+    fi
+done
+# openssh's hooks arrive WITH the package during this transaction, so the
+# scan above cannot see them — exclude the unguarded one explicitly:
+OPENSSH_MARK_HOOK="usr/share/libalpm/hooks/10-openssh-mark-sshd-for-restart.hook"
+if ! grep -qF "$OPENSSH_MARK_HOOK" /etc/pacman.conf; then
+    echo "NoExtract = $OPENSSH_MARK_HOOK" >> /etc/pacman.conf
+    HOOKS_NEUTERED="$HOOKS_NEUTERED$OPENSSH_MARK_HOOK;"
+fi
 
-apk -X "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_BRANCH}/main" \
-    -X "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_BRANCH}/community" \
-    -U --allow-untrusted --root "$ROOTFS" --initdb add \
-    alpine-base \
-    openrc \
-    busybox-openrc \
-    bash \
-    podman \
-    docker docker-openrc docker-cli-compose \
-    lxc lxc-templates lxc-download lxc-openrc lxc-bridge \
-    crun \
-    fuse-overlayfs \
-    iptables \
-    ip6tables \
-    nftables \
-    bridge-utils \
-    iproute2 \
-    dropbear dropbear-openrc \
-    openssh-sftp-server \
-    curl \
-    ca-certificates \
-    shadow shadow-uidmap \
-    slirp4netns \
-    aardvark-dns netavark \
-    libcap-utils \
-    doas sudo \
-    gcompat \
-    gzip \
-    xz \
-    tigervnc \
-    pulseaudio \
-    pulseaudio-utils \
-    font-misc-misc \
-    font-cursor-misc \
-    ttf-dejavu
+# ── pacman keyring ───────────────────────────────────────────────────────────
+# The Arch Linux ARM keyring ships in the tarball but is never initialized;
+# without this every package install fails signature verification.
+pacman-key --init
+pacman-key --populate archlinuxarm
 
-# Apply file capabilities to newuidmap/newgidmap. apk's package install often
-# does this, but we set them explicitly so the squashfs ships with the
-# correct security.capability xattr (preserved by mksquashfs without -no-xattrs).
+# ── packages ─────────────────────────────────────────────────────────────────
+# Mirrors Podroid's Alpine set, mapped to Arch Linux ARM names (all verified
+# against the ALARM aarch64 repo db). Deliberately NOT installed:
+#   openrc/busybox-openrc -> systemd (in base) is the init system
+#   gcompat               -> glibc is native on Arch, no compat layer needed
+#   bridge-utils          -> not in the ALARM aarch64 repos; iproute2 covers it
+#   lxc-templates         -> merged into Arch's lxc package
+pacman -Syu --noconfirm \
+    base systemd systemd-sysvcompat bash openssl \
+    podman docker docker-compose \
+    lxc dnsmasq \
+    crun fuse-overlayfs \
+    iptables nftables iproute2 \
+    dropbear openssh \
+    curl ca-certificates \
+    shadow slirp4netns aardvark-dns netavark \
+    libcap sudo opendoas \
+    gzip xz \
+    tigervnc pulseaudio \
+    ttf-dejavu xorg-fonts-misc \
+    dhcpcd \
+    squashfs-tools
+
+# ── box64 (x86_64 userspace emulator) from AUR ────────────────────────────────
+# Not in the ALARM repos (checked the aarch64 extra db); the AUR package's
+# arch array includes aarch64, so build it here with makepkg. Lets the guest
+# run x86_64 binaries directly — the practical answer to "does ARM Arch run
+# everything". Must run while DisableSandbox is still active above (the
+# builder kernel lacks Landlock too) and before pacman.conf is restored below.
+# Build deps go in --asdeps so the orphan sweep afterwards drops exactly what
+# the build added. sudo/gzip are ALSO in base-devel: re-mark them explicit so
+# the sweep can't take them (the guest needs sudo for wheel).
+pacman -S --asdeps --noconfirm --needed base-devel git cmake python
+pacman -D --asexplicit sudo gzip
+# box64.install's post_install runs `systemctl restart systemd-binfmt`;
+# systemd is never PID 1 in this builder, so neuter it for the install.
+mkdir -p /build/bin
+printf '#!/bin/sh\nexit 0\n' > /build/bin/systemctl
+chmod +x /build/bin/systemctl
+useradd -m builder
+printf 'builder ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/builder
+chmod 0440 /etc/sudoers.d/builder
+su builder -c 'git clone --depth 1 https://aur.archlinux.org/box64.git /tmp/box64-build && cd /tmp/box64-build && makepkg -s --noconfirm'
+# Ask makepkg for the exact package path (robust against naming variations).
+_pkg=$(su builder -c 'cd /tmp/box64-build && makepkg --packagelist' | head -1)
+if [ -z "$_pkg" ] || [ ! -f "$_pkg" ]; then
+    echo "FATAL: box64 package not produced; /tmp/box64-build contains:" >&2
+    ls -la /tmp/box64-build/ >&2
+    exit 1
+fi
+PATH=/build/bin:$PATH pacman -U --noconfirm "$_pkg"
+# Fail fast: the binary must actually execute on this (emulated) aarch64.
+box64 --help > /dev/null || { echo "FATAL: box64 did not survive the build" >&2; exit 1; }
+rm -rf /tmp/box64-build /build/bin
+userdel -r builder
+rm -f /etc/sudoers.d/builder
+# Drop the toolchain; the user can `pacman -S base-devel` themselves.
+_orp=$(pacman -Qtdq 2>/dev/null || true)
+if [ -n "$_orp" ]; then
+    # shellcheck disable=SC2086
+    pacman -Rs --noconfirm $_orp || true
+fi
+
+# ── restore pacman.conf ──────────────────────────────────────────────────────
+# The DisableSandbox above was a builder-only workaround; take it back out
+# so the shipped guest keeps pacman's default download sandboxing.
+if [ "$PACMAN_SANDBOX_DISABLED" = 1 ]; then
+    sed -i '/^DisableSandbox$/d' /etc/pacman.conf
+fi
+
+# ── file capabilities for rootless podman ────────────────────────────────────
+# setcap explicitly: the squashfs must ship the security.capability xattr
+# (preserved by mksquashfs without -no-xattrs).
 if command -v setcap >/dev/null 2>&1; then
     setcap cap_setuid+ep "$ROOTFS/usr/bin/newuidmap"
     setcap cap_setgid+ep "$ROOTFS/usr/bin/newgidmap"
 fi
 
-# Ensure doas and sudo are setuid-root. apk usually does this, but on
-# overlay-mounted build hosts it can silently fail.
-chmod u+s "$ROOTFS/usr/bin/doas"  2>/dev/null || true
-chmod u+s "$ROOTFS/usr/bin/sudo"  2>/dev/null || true
-
-# doas: members of the `wheel` group can become root after entering their
-# password (cached for ~5 min). Standard *BSD/Alpine convention.
+# ── privilege escalation ─────────────────────────────────────────────────────
+chmod u+s "$ROOTFS/usr/bin/sudo" 2>/dev/null || true
+# opendoas uses the same doas.conf format as Alpine's doas.
 mkdir -p "$ROOTFS/etc/doas.d"
 echo "permit persist :wheel" > "$ROOTFS/etc/doas.d/doas.conf"
 chmod 0400 "$ROOTFS/etc/doas.d/doas.conf"
-
-# sudo: equivalent rule for users who prefer sudo over doas.
 mkdir -p "$ROOTFS/etc/sudoers.d"
 echo "%wheel ALL=(ALL) ALL" > "$ROOTFS/etc/sudoers.d/wheel"
 chmod 0440 "$ROOTFS/etc/sudoers.d/wheel"
 
-# Set root password to "podroid" (pre-hashed with openssl).
-# We can't run chpasswd inside the aarch64 rootfs from an x86_64 host,
-# so write the SHA-512 hash directly into /etc/shadow.
-# No fixed -salt: openssl generates a random salt so the stored hash differs
-# per build (the password stays the documented default "podroid").
-ROOT_HASH=$(openssl passwd -6 podroid)
+# ── root password "ardroid" (pre-hashed; openssl makes a random salt) ─────────
+ROOT_HASH=$(openssl passwd -6 ardroid)
 sed -i "s|^root:[^:]*:|root:${ROOT_HASH}:|" "$ROOTFS/etc/shadow"
 
-# Strip docs/man/locale to shrink squashfs
-rm -rf "$ROOTFS/usr/share/man" "$ROOTFS/usr/share/doc" \
-       "$ROOTFS/usr/share/locale" "$ROOTFS/usr/share/info"
+# ── locale ───────────────────────────────────────────────────────────────────
+sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' "$ROOTFS/etc/locale.gen"
+locale-gen
+echo "LANG=en_US.UTF-8" > "$ROOTFS/etc/locale.conf"
 
-# Remove the stock pulseaudio OpenRC service. Podroid starts pulseaudio
-# directly from podroid-x11 (start-stop-daemon), never as a service; left in
-# place its depend() pulls in a non-existent "udev" service, so OpenRC logs
-# "Service 'pulseaudio' needs non existent service 'udev'" on every boot.
-rm -f "$ROOTFS/etc/init.d/pulseaudio"
+# ── machine-id: empty file -> systemd generates a unique ID on first boot ────
+: > "$ROOTFS/etc/machine-id"
 
-# Pre-create podman storage dirs (saves first-boot mkdir)
-mkdir -p "$ROOTFS/var/lib/containers/storage" \
-         "$ROOTFS/run/containers/storage" \
-         "$ROOTFS/run/libpod" \
-         "$ROOTFS/run/crun"
+# ── resolv.conf: podroid-network writes it directly; drop Arch's ─────────────
+# systemd-resolved stub symlink (resolved isn't running in the guest).
+rm -f "$ROOTFS/etc/resolv.conf"
+: > "$ROOTFS/etc/resolv.conf"
 
-# Copy custom service files into the rootfs
-cp /work/files/etc/init.d/podroid-bootstrap "$ROOTFS/etc/init.d/"
-cp /work/files/etc/init.d/podroid-network   "$ROOTFS/etc/init.d/"
-cp /work/files/etc/init.d/podroid-resize    "$ROOTFS/etc/init.d/"
-cp /work/files/etc/init.d/podroid-ready     "$ROOTFS/etc/init.d/"
-cp /work/files/etc/init.d/podroid-x11       "$ROOTFS/etc/init.d/"
-cp /work/files/etc/init.d/podroid-vsock     "$ROOTFS/etc/init.d/"
-cp /work/files/etc/init.d/podroid-hostd     "$ROOTFS/etc/init.d/"
-cp /work/files/etc/init.d/podroid-downloads "$ROOTFS/etc/init.d/"
-cp /work/files/etc/init.d/podroid-migrate   "$ROOTFS/etc/init.d/"
-chmod +x "$ROOTFS/etc/init.d/podroid-"*
+# ── hostname ─────────────────────────────────────────────────────────────────
+echo "ardroid" > "$ROOTFS/etc/hostname"
+# NOTE: /etc/hosts is a read-only bind mount inside `docker build`, so it
+# cannot be written here (the build failed with "Read-only file system").
+# Stage the desired content instead; the guest installs it at first boot
+# (see podroid-bootstrap.sh), where /etc/hosts is a regular writable file.
+printf '127.0.0.1 localhost ardroid\n::1 localhost ip6-localhost\n' > "$ROOTFS/etc/hosts.ardroid"
 
-# Copy /usr/local/bin scripts (resize daemon + login wrapper + getty selector)
+# ── pacman: DisableSandbox in the GUEST image ─────────────────────────────────
+# The VM kernel (Alpine's prebuilt vmlinuz-virt, reused as-is) has no Landlock
+# support, so pacman 7's download sandbox can never work inside the guest —
+# `pacman -Syu` fails with "restricting filesystem access failed because
+# Landlock is not supported by the kernel!". The builder-only DisableSandbox
+# above covers the image build; the guest needs its own copy, permanently.
+if ! grep -q '^DisableSandbox' "$ROOTFS/etc/pacman.conf"; then
+    sed -i 's/^\[options\]$/[options]\nDisableSandbox/' "$ROOTFS/etc/pacman.conf"
+fi
+
+# ── login banner ─────────────────────────────────────────────────────────────
+cat > "$ROOTFS/etc/issue" <<'EOF'
+Welcome to ArDroid (Arch Linux ARM)
+Kernel \r on \m (\l)
+
+  Default login:  root  /  ardroid
+  Change root password:    passwd
+  Create a regular user:   useradd -m -G wheel <name>
+                           (wheel group → can run sudo/doas)
+
+EOF
+
+# ── podroid helper scripts (portable sh; unchanged from Podroid) ─────────────
 mkdir -p "$ROOTFS/usr/local/bin"
-cp /work/files/usr/local/bin/podroid-resize "$ROOTFS/usr/local/bin/"
-cp /work/files/usr/local/bin/podroid-login  "$ROOTFS/usr/local/bin/"
-cp /work/files/usr/local/bin/podroid-getty  "$ROOTFS/usr/local/bin/"
-cp /work/files/usr/local/bin/podroid-backup "$ROOTFS/usr/local/bin/"
-# podroid-vsock-agent is COPY'd in from the vsock-builder Docker stage. Make
-# sure it's executable (cross-arch COPY can lose the mode bit on some buildkit
-# versions).
+cp /build/files/usr/local/bin/podroid-resize  "$ROOTFS/usr/local/bin/"
+cp /build/files/usr/local/bin/podroid-login   "$ROOTFS/usr/local/bin/"
+cp /build/files/usr/local/bin/podroid-getty   "$ROOTFS/usr/local/bin/"
+cp /build/files/usr/local/bin/podroid-backup  "$ROOTFS/usr/local/bin/"
+# systemd service helpers (ported from the old OpenRC init.d scripts).
+mkdir -p "$ROOTFS/usr/local/lib/podroid"
+cp /build/files/usr/local/lib/podroid/*.sh "$ROOTFS/usr/local/lib/podroid/"
+chmod 0755 "$ROOTFS"/usr/local/lib/podroid/*.sh
+# vsock binaries are COPY'd from the vsock-builder Docker stage; the mode bit
+# can be lost on some buildkit versions — guard it.
 chmod +x "$ROOTFS/usr/local/bin/podroid-vsock-agent" 2>/dev/null || true
-# podroid-hostd is also COPY'd from the vsock-builder stage; same mode-bit guard.
-# The CLIs are argv[0]-dispatch symlinks onto the one multi-call binary.
 chmod +x "$ROOTFS/usr/local/bin/podroid-hostd" 2>/dev/null || true
-# podroid-overlay-normalize is COPY'd from the vsock-builder stage; mode-bit guard.
 chmod +x "$ROOTFS/usr/local/bin/podroid-overlay-normalize" 2>/dev/null || true
+# The CLIs are argv[0]-dispatch symlinks onto the one multi-call binary.
 ln -sf podroid-hostd "$ROOTFS/usr/local/bin/podroid-notify"
 ln -sf podroid-hostd "$ROOTFS/usr/local/bin/podroid-forward"
 ln -sf podroid-hostd "$ROOTFS/usr/local/bin/podroid-open"
@@ -131,76 +211,118 @@ ln -sf podroid-hostd "$ROOTFS/usr/local/bin/podroid-power"
 ln -sf podroid-hostd "$ROOTFS/usr/local/bin/podroid-headless"
 ln -sf podroid-hostd "$ROOTFS/usr/local/bin/podroid-server"
 chmod +x "$ROOTFS/usr/local/bin/podroid-"*
-# vsock agent's initial forward table (read at podroid-vsock startup).
+
+# ── systemd units ────────────────────────────────────────────────────────────
+# Installed from files/etc/systemd/system; enabled via explicit symlinks
+# (the build host can't chroot into the aarch64 rootfs to run systemctl).
+mkdir -p "$ROOTFS/etc/systemd/system"
+cp /build/files/etc/systemd/system/*.service "$ROOTFS/etc/systemd/system/"
+chmod 0644 "$ROOTFS"/etc/systemd/system/podroid-*.service \
+           "$ROOTFS"/etc/systemd/system/dropbear.service 2>/dev/null || true
+
+# Vendor-unit ordering overrides (bind mounts from podroid-bootstrap, etc.).
+mkdir -p "$ROOTFS/etc/systemd/system/docker.service.d"
+cat > "$ROOTFS/etc/systemd/system/docker.service.d/podroid.conf" <<'EOF'
+[Unit]
+After=podroid-bootstrap.service
+Before=podroid-ready.service
+EOF
+mkdir -p "$ROOTFS/etc/systemd/system/lxc.service.d"
+cat > "$ROOTFS/etc/systemd/system/lxc.service.d/podroid.conf" <<'EOF'
+[Unit]
+After=podroid-bootstrap.service podroid-lxc-net.service
+Before=podroid-ready.service
+EOF
+chmod 0644 "$ROOTFS"/etc/systemd/system/docker.service.d/podroid.conf \
+           "$ROOTFS"/etc/systemd/system/lxc.service.d/podroid.conf
+
+# Enable: everything the old OpenRC default runlevel started.
+mkdir -p "$ROOTFS/etc/systemd/system/multi-user.target.wants"
+for svc in podroid-migrate podroid-bootstrap podroid-network podroid-resize \
+           podroid-vsock podroid-downloads podroid-hostd podroid-x11 \
+           podroid-lxc-net podroid-ready dropbear docker lxc; do
+    # Our units live in /etc, vendor units (docker, lxc) in /usr/lib —
+    # point the .wants symlink at the real location, never a dangling path.
+    if [ -e "$ROOTFS/etc/systemd/system/$svc.service" ]; then
+        _target="/etc/systemd/system/$svc.service"
+    elif [ -e "$ROOTFS/usr/lib/systemd/system/$svc.service" ]; then
+        _target="/usr/lib/systemd/system/$svc.service"
+    else
+        echo "WARN: unit $svc.service missing, skipping enable"
+        continue
+    fi
+    ln -sf "$_target" \
+        "$ROOTFS/etc/systemd/system/multi-user.target.wants/$svc.service"
+done
+# Serial gettys (backend-agnostic via podroid-getty wrapper, like inittab did).
+mkdir -p "$ROOTFS/etc/systemd/system/getty.target.wants"
+for inst in hvc0 ttyS0; do
+    ln -sf "/etc/systemd/system/podroid-getty@.service" \
+        "$ROOTFS/etc/systemd/system/getty.target.wants/podroid-getty@$inst.service"
+done
+# We use serial gettys only; mask the default tty1 getty.
+ln -sf /dev/null "$ROOTFS/etc/systemd/system/getty@tty1.service"
+# Boot straight into multi-user (no graphical.target needed; Xvnc is a unit).
+ln -sf /usr/lib/systemd/system/multi-user.target \
+    "$ROOTFS/etc/systemd/system/default.target"
+
+# ── podroid state dirs ───────────────────────────────────────────────────────
 mkdir -p "$ROOTFS/etc/podroid"
-cp /work/files/etc/podroid/forwards.conf "$ROOTFS/etc/podroid/forwards.conf"
+cp /build/files/etc/podroid/forwards.conf "$ROOTFS/etc/podroid/forwards.conf"
 chmod 0644 "$ROOTFS/etc/podroid/forwards.conf"
-# Migration scripts dir (seeded with its README; per-version <v>.sh added over time).
 mkdir -p "$ROOTFS/etc/podroid/migrations"
-cp /work/files/etc/podroid/migrations/README "$ROOTFS/etc/podroid/migrations/README"
-# Install every migration script so a new one needs no build-script edit.
-for f in /work/files/etc/podroid/migrations/*.sh; do
+cp /build/files/etc/podroid/migrations/README "$ROOTFS/etc/podroid/migrations/"
+for f in /build/files/etc/podroid/migrations/*.sh; do
     [ -f "$f" ] || continue
     cp "$f" "$ROOTFS/etc/podroid/migrations/"
     chmod 0755 "$ROOTFS/etc/podroid/migrations/$(basename "$f")"
 done
-# System-version stamp: the migration anchor. Baked from the app versionCode at
-# build time; compared against /mnt/persist/.podroid/applied-version at boot.
 printf '%s\n' "${SYSTEM_VERSION:-0}" > "$ROOTFS/etc/podroid/system-version"
 chmod 0644 "$ROOTFS/etc/podroid/system-version"
-cp /work/files/etc/inittab "$ROOTFS/etc/inittab"
-cp /work/files/etc/rc.conf "$ROOTFS/etc/rc.conf"
 
-# /etc/profile.d/*.sh — sourced by Alpine's /etc/profile in login shells.
-# podroid-color.sh: COLORTERM=truecolor (24-bit color). podroid-x11.sh:
-# DISPLAY / PULSE_SERVER for the in-app GUI viewer. Copy by explicit name so
-# a renamed/removed asset fails the build (set -e) instead of silently
-# shipping a squashfs without these exports.
+# ── /etc/profile.d (sourced by bash login shells, like on Alpine) ────────────
 mkdir -p "$ROOTFS/etc/profile.d"
-cp /work/files/etc/profile.d/podroid-color.sh "$ROOTFS/etc/profile.d/"
-cp /work/files/etc/profile.d/podroid-x11.sh   "$ROOTFS/etc/profile.d/"
+cp /build/files/etc/profile.d/podroid-color.sh "$ROOTFS/etc/profile.d/"
+cp /build/files/etc/profile.d/podroid-x11.sh   "$ROOTFS/etc/profile.d/"
 chmod 0644 "$ROOTFS/etc/profile.d/podroid-color.sh" "$ROOTFS/etc/profile.d/podroid-x11.sh"
 
-# /etc/containers/storage.conf — pin Podman to the in-kernel overlay driver.
-# Without this file, Podman auto-detects fuse-overlayfs (still apk-installed
-# as a fallback) and uses it, which is slower than native overlay.
+# ── /etc/containers/storage.conf: pin Podman to the in-kernel overlay ────────
 mkdir -p "$ROOTFS/etc/containers"
-cp /work/files/etc/containers/storage.conf "$ROOTFS/etc/containers/storage.conf"
+cp /build/files/etc/containers/storage.conf "$ROOTFS/etc/containers/storage.conf"
 chmod 0644 "$ROOTFS/etc/containers/storage.conf"
 
-# Hostname (read by podroid-bootstrap via `hostname -F /etc/hostname`)
-echo "podroid" > "$ROOTFS/etc/hostname"
-echo "127.0.0.1 localhost podroid" > "$ROOTFS/etc/hosts"
-echo "::1 localhost ip6-localhost" >> "$ROOTFS/etc/hosts"
+# ── pre-create container storage dirs (saves first-boot mkdir) ──────────────
+mkdir -p "$ROOTFS/var/lib/containers/storage" \
+         "$ROOTFS/run/containers/storage" \
+         "$ROOTFS/run/libpod" \
+         "$ROOTFS/run/crun" \
+         "$ROOTFS/mnt/persist" \
+         "$ROOTFS/var/log"
 
-# Login banner shown by getty before the login prompt.
-# \S=Alpine release, \r=kernel, \m=arch, \l=tty
-cat > "$ROOTFS/etc/issue" <<'EOF'
-Welcome to Podroid (Alpine \S)
-Kernel \r on \m (\l)
-
-  Default login:  root  /  podroid
-  Change root password:    passwd
-  Create a regular user:   adduser -G wheel <name>
-                           (wheel group → can run doas/sudo)
-
-EOF
-
-# Set runlevels via direct symlinks (host is x86_64, can't chroot into aarch64 rootfs to run rc-update).
-# rc-update is just `ln -s /etc/init.d/X /etc/runlevels/<level>/X` under the hood.
-mkdir -p "$ROOTFS/etc/runlevels/default" "$ROOTFS/etc/runlevels/boot"
-# Guard each link: a dangling symlink (e.g. dnsmasq.lxcbr0, which lxc-bridge
-# may ship only as dnsmasq config and not an init script) makes OpenRC log
-# an error every boot and stalls podroid-ready's `after *` on a phantom.
-for svc in podroid-migrate podroid-bootstrap podroid-network podroid-resize dropbear docker lxc dnsmasq.lxcbr0 podroid-x11 podroid-vsock podroid-downloads podroid-hostd podroid-ready; do
-    if [ -e "$ROOTFS/etc/init.d/$svc" ]; then
-        ln -sf "/etc/init.d/$svc" "$ROOTFS/etc/runlevels/default/$svc"
-    else
-        echo "WARN: init script /etc/init.d/$svc missing, skipping runlevel symlink"
+# ── restore neutered hooks ───────────────────────────────────────────────────
+# Bring back the hooks moved aside above, drop the NoExtract workarounds,
+# and re-extract the skipped openssh hook from the package cache — so the
+# shipped guest contains every file its packages ship. (Runs before the
+# cache cleanup below.)
+for hook in /build/hooks-disabled/*.hook; do
+    [ -e "$hook" ] || continue
+    mv "$hook" /usr/share/libalpm/hooks/
+done
+if [ -n "$HOOKS_NEUTERED" ]; then
+    _rest="$HOOKS_NEUTERED"
+    while [ -n "$_rest" ]; do
+        _one="${_rest%%;*}"; _rest="${_rest#*;}"
+        [ -n "$_one" ] && sed -i "\|^NoExtract = $_one\$|d" /etc/pacman.conf
+    done
+    _ospkg=$(ls /var/cache/pacman/pkg/openssh-[0-9]*.pkg.tar.zst 2>/dev/null | head -1)
+    if [ -n "$_ospkg" ] && [ ! -e "/$OPENSSH_MARK_HOOK" ]; then
+        tar -xf "$_ospkg" -C / "$OPENSSH_MARK_HOOK"
     fi
-done
+fi
 
-# Disable services we don't need (initramfs already handles them, or they're noise in the VM)
-for svc in hwclock swclock urandom networking sysctl bootmisc syslog; do
-    rm -f "$ROOTFS/etc/runlevels/boot/$svc" "$ROOTFS/etc/runlevels/default/$svc"
-done
+# ── shrink: docs, caches, logs ───────────────────────────────────────────────
+rm -rf "$ROOTFS/usr/share/man" "$ROOTFS/usr/share/doc" "$ROOTFS/usr/share/info"
+rm -rf /var/cache/pacman/pkg/* /tmp/* /var/tmp/* "$ROOTFS/var/log"/*
+# /etc/pacman.d/gnupg stays (keyring needed for future pacman runs).
+
+echo "ArDroid rootfs ready."

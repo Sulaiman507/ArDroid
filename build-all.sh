@@ -34,7 +34,7 @@ Commands:
   all           Build everything (Kernel, Initramfs, Rootfs, QEMU, APK)
   kernel        Build custom kernel only (podroid_kernel.config + Linux source)
   initramfs     Build custom kernel + Alpine VM initramfs (vmlinuz + initrd)
-  rootfs        Build Alpine rootfs squashfs (alpine-rootfs.squashfs)
+  rootfs        Build Arch Linux ARM rootfs squashfs (arch-rootfs.squashfs)
   qemu          Build QEMU + podroid-bridge + podroid-launcher
   apk           Build the Android APK (also builds libtermux.so via Gradle NDK)
   deploy        Build APK, uninstall old version, and install to device
@@ -120,7 +120,7 @@ build_initramfs() {
 }
 
 build_rootfs() {
-    log "Building Alpine rootfs squashfs..."
+    log "Building Arch Linux ARM rootfs squashfs..."
     local sysver
     sysver=$(grep -E '^[[:space:]]*versionCode[[:space:]]*=' "${SCRIPT_DIR}/app/build.gradle.kts" | grep -oE '[0-9]+' | head -1)
     docker build -f "${SCRIPT_DIR}/build-rootfs/Dockerfile.rootfs" \
@@ -128,7 +128,7 @@ build_rootfs() {
         --build-arg "SYSTEM_VERSION=${sysver:-0}" \
         --output type=local,dest="${ASSETS}" \
         "${SCRIPT_DIR}/build-rootfs/"
-    success "Built ${ASSETS}/alpine-rootfs.squashfs ($(du -h "${ASSETS}/alpine-rootfs.squashfs" | cut -f1)), system-version ${sysver:-0}"
+    success "Built ${ASSETS}/arch-rootfs.squashfs ($(du -h "${ASSETS}/arch-rootfs.squashfs" | cut -f1)), system-version ${sysver:-0}"
 }
 
 build_qemu() {

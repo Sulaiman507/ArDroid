@@ -122,7 +122,8 @@ mkdir -p /mnt/overlay/mnt/lower \
 mount --move /mnt/lower /mnt/overlay/mnt/lower \
     || { echo "FATAL: mount --move /mnt/lower failed" > /dev/console; exec sh; }
 
-# Move our early mounts into the new root so OpenRC inherits them
+# Move our early mounts into the new root so the new init (systemd on Arch,
+# OpenRC on Alpine builds) inherits them
 mount --move /proc /mnt/overlay/proc \
     || { echo "FATAL: mount --move /proc failed" > /dev/console; exec sh; }
 mount --move /sys  /mnt/overlay/sys \

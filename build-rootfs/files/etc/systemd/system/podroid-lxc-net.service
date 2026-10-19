@@ -1,0 +1,12 @@
+[Unit]
+Description=ArDroid LXC bridge (lxcbr0) with NAT and DHCP/DNS
+After=podroid-bootstrap.service
+Before=lxc.service podroid-ready.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/podroid/podroid-lxc-net.sh
+
+[Install]
+WantedBy=multi-user.target

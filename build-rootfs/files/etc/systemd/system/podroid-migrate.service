@@ -1,0 +1,12 @@
+[Unit]
+Description=ArDroid system migrations (runs versioned upgrade scripts once)
+After=local-fs.target
+Before=podroid-bootstrap.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/podroid/podroid-migrate.sh
+
+[Install]
+WantedBy=multi-user.target

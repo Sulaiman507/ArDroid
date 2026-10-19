@@ -1,0 +1,12 @@
+[Unit]
+Description=ArDroid VM networking (10.0.2.15 via SLIRP, or DHCP on AVF)
+After=podroid-bootstrap.service
+Before=podroid-ready.service podroid-downloads.service podroid-x11.service dropbear.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/podroid/podroid-network.sh
+
+[Install]
+WantedBy=multi-user.target

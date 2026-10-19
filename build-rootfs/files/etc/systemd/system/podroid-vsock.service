@@ -1,0 +1,16 @@
+[Unit]
+Description=ArDroid vsock control + port forwarding agent (AVF only)
+After=podroid-bootstrap.service
+Before=podroid-ready.service podroid-downloads.service
+ConditionKernelCommandLine=podroid.backend=avf
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/podroid-vsock-agent
+StandardOutput=append:/var/log/podroid-vsock-agent.log
+StandardError=append:/var/log/podroid-vsock-agent.log
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

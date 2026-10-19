@@ -1,0 +1,13 @@
+[Unit]
+Description=Dropbear SSH server
+After=podroid-network.service
+Before=podroid-ready.service
+
+[Service]
+ExecStartPre=/usr/local/lib/podroid/dropbear-keygen.sh
+ExecStart=/usr/bin/dropbear -F -E
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
