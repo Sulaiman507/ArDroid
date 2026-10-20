@@ -208,8 +208,9 @@ Kernel \r on \m (\l)
 EOF
 
 # ── post-login welcome (shown by every login shell) ──────────────────────────
-# The getty banner (/etc/issue) was unreliable on the phone terminal, so the
-# welcome is printed here instead — guaranteed visible right after login.
+# Printed right after login; the pre-login greeting is /etc/issue (printed by
+# agetty — see podroid-getty; it only looked unreliable while the hidden
+# serial-getty@hvc0 twin raced our getty, now masked).
 cat > "$ROOTFS/etc/profile.d/ardroid-welcome.sh" <<'EOF'
 # ArDroid welcome banner (login shells only)
 if [ -z "$ARDROID_WELCOME_SHOWN" ]; then
@@ -298,6 +299,11 @@ for inst in hvc0 ttyS0; do
 done
 # We use serial gettys only; mask the default tty1 getty.
 ln -sf /dev/null "$ROOTFS/etc/systemd/system/getty@tty1.service"
+# systemd-getty-generator auto-creates serial-getty@hvc0 at every boot when
+# /dev/hvc0 exists; that hidden twin races podroid-getty@hvc0 for the same
+# console input and scrambles logins (root-caused 2026-10-20). Mask it in the
+# image too (the engines also pass systemd.mask= on the kernel cmdline).
+ln -sf /dev/null "$ROOTFS/etc/systemd/system/serial-getty@hvc0.service"
 # Boot straight into multi-user (no graphical.target needed; Xvnc is a unit).
 ln -sf /usr/lib/systemd/system/multi-user.target \
     "$ROOTFS/etc/systemd/system/default.target"

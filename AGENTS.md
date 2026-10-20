@@ -105,9 +105,9 @@ On **AVF** there is no QMP and no PL011: the console is captured via `ConsoleFan
    - `podroid-downloads.service` - Downloads-folder sharing.
    - `podroid-x11.service` - Xvnc + PulseAudio for the X11 viewer.
    - `podroid-migrate.service` - one-shot guest migrations on version change.
-   - `podroid-getty@.service` - `agetty --noissue` on hvc0 via the `podroid-getty` wrapper (picks the tty from the `podroid.tty=` cmdline marker; Arch has `/sbin/agetty`, no `/sbin/getty`).
+   - `podroid-getty@.service` - `agetty` on hvc0 via the `podroid-getty` wrapper (picks the tty from the `podroid.tty=` cmdline marker; Arch has `/sbin/agetty`, no `/sbin/getty`). **Never let another getty share hvc0:** `systemd-getty-generator` auto-creates `serial-getty@hvc0` whenever `/dev/hvc0` exists — that hidden twin raced this getty for console input and scrambled logins (split/lost keystrokes, echoed passwords, doubled prompts; root-caused 2026-10-20). It is masked twice: an `/etc/systemd/system/serial-getty@hvc0.service` → `/dev/null` symlink baked into the image by `build-rootfs.sh`, and `systemd.mask=serial-getty@hvc0.service` on the guest cmdline from both engines.
    - `podroid-ready.service` - emits `Starting SSH...` / `Almost ready...` / `Ready!`, the markers `BootStageDetector` matches; `Ready!` flips state to `Running` and auto-starts the terminal bridge.
-4. The welcome banner is printed **after login** by `/etc/profile.d/ardroid-welcome.sh` (the getty-time `/etc/issue` proved unreliable on the phone terminal, so agetty runs with `--noissue`).
+4. Two greetings: **before login**, agetty prints `/etc/issue` (default login + tips); **after login**, `/etc/profile.d/ardroid-welcome.sh` prints the welcome banner. (The issue text was long suppressed with `--noissue` for 'unreliability' — that was actually the `serial-getty@hvc0` twin printing it at random times; with the twin masked it is deterministic again.)
 
 **Why `switch_root`, not `chroot`:** an earlier version `chroot`ed into the overlay, which broke `podman exec -it` - `setns(MNT)` in `crun exec` resets `fs->root`, so the exec'd process saw raw kernel paths (`/mnt/overlay/proc`) instead of `/proc`. `switch_root` reorganizes the kernel mount tree itself, so namespace forks see a clean `/`.
 

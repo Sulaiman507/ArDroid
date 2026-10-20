@@ -18,12 +18,17 @@ WANT=$(sed -n 's/.*podroid\.tty=\([a-zA-Z0-9]*\).*/\1/p' /proc/cmdline)
 if [ "$TTY" = "$WANT" ]; then
     # NOTE: no screen-clear here. A clear sequence before agetty used to wipe
     # the login banner on some terminals (it was only needed on AVF, where
-    # boot markers share hvc0). The welcome banner is shown after login
-    # instead (see /etc/profile.d/ardroid-welcome.sh), so agetty runs with
-    # --noissue to avoid ever printing it twice.
+    # boot markers share hvc0).
+    # NOTE: agetty prints /etc/issue (the pre-login greeting) on purpose. It
+    # used to run with --noissue because the issue text appeared erratically;
+    # the real cause was systemd-getty-generator's hidden serial-getty@hvc0
+    # racing this getty for the same console (masked since 2026-10-21 — see
+    # build-rootfs.sh and the engines' systemd.mask= cmdline). With the twin
+    # gone, issue printing is deterministic. A second welcome also prints
+    # after login (see /etc/profile.d/ardroid-welcome.sh).
     # NOTE: Arch ships agetty as /sbin/agetty (via /sbin -> /usr/bin);
 # there is no /sbin/getty on Arch (that was Alpine/busybox).
-    exec /sbin/agetty -L --noissue -l /usr/local/bin/podroid-login 115200 "$TTY" xterm-256color
+    exec /sbin/agetty -L -l /usr/local/bin/podroid-login 115200 "$TTY" xterm-256color
 fi
 
 # Wrong tty for this backend. Sleep instead of exiting so busybox init
