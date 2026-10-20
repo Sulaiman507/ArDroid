@@ -354,7 +354,12 @@ class TerminalViewModel @Inject constructor(
             imm.showSoftInput(view, 0)
         }
         override fun shouldBackButtonBeMappedToEscape(): Boolean = false
-        override fun shouldEnforceCharBasedInput(): Boolean = false
+        // Char-based input ON: with TYPE_NULL the IME commits composed/autocorrected
+        // text, which silently altered the getty password on the owner's device
+        // (login rejected a stored-correct password, 2026-10-20). The enforced mode
+        // (VISIBLE_PASSWORD | NO_SUGGESTIONS) delivers keystrokes verbatim; word
+        // suggestions are sacrificed until a safer input path exists.
+        override fun shouldEnforceCharBasedInput(): Boolean = true
         override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
         override fun isTerminalViewSelected(): Boolean = true
         override fun copyModeChanged(copyMode: Boolean) {}

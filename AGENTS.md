@@ -133,7 +133,7 @@ In-app viewer that talks RFB to `Xvnc` in the guest, with touch→mouse, soft-ke
 
 ### Terminal keyboard
 
-`TerminalViewModel.shouldEnforceCharBasedInput()` returns `false`, so the soft keyboard runs with `InputType.TYPE_NULL` and word suggestions/autocomplete work normally. (Upstream Termux used `true` here as a Samsung-keyboard workaround, which set `TYPE_TEXT_FLAG_NO_SUGGESTIONS` and broke suggestions.)
+`TerminalViewModel.shouldEnforceCharBasedInput()` returns `true`, so the soft keyboard runs char-based (`TYPE_TEXT_VARIATION_VISIBLE_PASSWORD | TYPE_TEXT_FLAG_NO_SUGGESTIONS`) and keystrokes reach the guest verbatim. Do NOT flip this back to `false` (`TYPE_NULL`) for word suggestions: that was tried in 6e93d6e and reverted on 2026-10-20 — with `TYPE_NULL` the IME commits composed/autocorrected text, which silently altered the getty password on the owner's phone (login rejected a password whose stored hash was verified correct). Suggestions stay off until an input path exists that cannot rewrite committed text.
 
 ### Internationalization
 
