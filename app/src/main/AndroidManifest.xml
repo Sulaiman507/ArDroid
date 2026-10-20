@@ -134,7 +134,7 @@
 
         <!-- Foreground service that hosts the QEMU process -->
         <service
-            android:name=".service.PodroidService"
+            android:name=".service.ArDroidService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
