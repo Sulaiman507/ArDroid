@@ -537,6 +537,11 @@ class QemuEngine @Inject constructor(
             val cmdline = buildString {
                 // mitigations=off: speculative-exec attacks don't cross the TCG ISA boundary; 5–15% gain.
                 append("console=ttyAMA0 mitigations=off")
+                // systemd-getty-generator auto-creates serial-getty@hvc0 whenever
+                // /dev/hvc0 exists, racing podroid-getty@hvc0 for the same console
+                // input: split/lost keystrokes, echoed passwords, doubled prompts,
+                // rejected logins. Mask the generated instance for this boot.
+                append(" systemd.mask=serial-getty@hvc0.service")
                 if (userKernelExtras.isNotEmpty()) append(" ").append(userKernelExtras)
                 append(" androidip=").append(config.androidIp)
                 if (config.sshEnabled) append(" ssh=1")

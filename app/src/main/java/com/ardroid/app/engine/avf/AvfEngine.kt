@@ -1070,7 +1070,9 @@ class AvfEngine @Inject constructor(
         // AvfCpuPolicy.
         val nrCpusFlag =
             if (effectiveCpus > 1 && !useExplicitCpuCount) " nr_cpus=$effectiveCpus" else ""
-        val resolvedCmdline = ("console=hvc0 $earlycon root=/dev/ram0 mitigations=off " +
+        // systemd.mask: keep systemd-getty-generator's auto serial-getty@hvc0 from
+        // racing podroid-getty@hvc0 for the same console (see QemuEngine).
+        val resolvedCmdline = ("console=hvc0 $earlycon root=/dev/ram0 mitigations=off systemd.mask=serial-getty@hvc0.service " +
             "elevator=mq-deadline podroid.tty=hvc0 podroid.backend=avf podroid.epoch=$epoch " +
             "podroid.x11.dpi=${config.x11Dpi}$verboseFlags$nrCpusFlag " +
             (if (config.bandwidthMbps > 0) "podroid.bandwidth=${config.bandwidthMbps} " else "") +
