@@ -92,10 +92,12 @@ class ArDroidService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        com.ardroid.app.util.StartDebug.mark(this, "SVC: onCreate()")
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        com.ardroid.app.util.StartDebug.mark(this, "SVC: onStartCommand action=${intent?.action}")
         when (intent?.action) {
             ACTION_START -> {
                 // Android 14+ (API 34) requires the foregroundServiceType argument
@@ -343,6 +345,7 @@ class ArDroidService : Service() {
     }
 
     private fun launchArDroid() {
+        com.ardroid.app.util.StartDebug.mark(this, "LAUNCH: launchArDroid() entered")
         serviceScope.launch {
             startNotificationUpdates()
             withContext(Dispatchers.IO) {
@@ -352,6 +355,7 @@ class ArDroidService : Service() {
                     // we MUST block here until extraction has fully completed or
                     // the VM could launch against a partial/missing file.
                     (application as? ArDroidApplication)?.awaitAssetsReady()
+                    com.ardroid.app.util.StartDebug.mark(this@ArDroidService, "LAUNCH: assets ready")
 
                     val rules = portForwardRepository.getRulesSnapshot().toMutableList()
                     val sshEnabled = settingsRepository.getSshEnabledSnapshot()
@@ -392,10 +396,13 @@ class ArDroidService : Service() {
                     if (config.usbPassthroughEnabled) {
                         serviceScope.launch { observeStateForUsb() }
                     }
+                    com.ardroid.app.util.StartDebug.mark(this@ArDroidService, "LAUNCH: calling engine.start()")
                     engine.start(rules, config)
+                    com.ardroid.app.util.StartDebug.mark(this@ArDroidService, "LAUNCH: engine.start() returned")
                 } catch (c: CancellationException) {
                     throw c // a stop/teardown cancelled this launch; not a start failure
                 } catch (e: Exception) {
+                    com.ardroid.app.util.StartDebug.mark(this@ArDroidService, "LAUNCH: EXCEPTION ${e.javaClass.name}: ${e.message}")
                     Log.e(TAG, "QEMU failed to start", e)
                     // A Service-side throw here (failed asset extraction, a
                     // snapshot read, or engine.start()) can happen before the
@@ -560,10 +567,17 @@ class ArDroidService : Service() {
         const val SSH_HOST_PORT  = 9922
 
         fun start(context: Context) {
+            com.ardroid.app.util.StartDebug.mark(context, "SVC-START: companion start() called")
             val intent = Intent(context, ArDroidService::class.java).apply {
                 action = ACTION_START
             }
-            context.startForegroundService(intent)
+            try {
+                context.startForegroundService(intent)
+                com.ardroid.app.util.StartDebug.mark(context, "SVC-START: startForegroundService() returned OK")
+            } catch (e: Throwable) {
+                com.ardroid.app.util.StartDebug.mark(context, "SVC-START: startForegroundService() THREW ${e.javaClass.name}: ${e.message}")
+                throw e
+            }
         }
 
         fun stop(context: Context) {

@@ -508,6 +508,8 @@ class SettingsViewModel @Inject constructor(
             }
             appendLine()
 
+            appendLine("=== Start Debug ===")
+            appendLine(com.ardroid.app.util.StartDebug.read(context))
             appendLine("=== End of Log ===")
         }
     }

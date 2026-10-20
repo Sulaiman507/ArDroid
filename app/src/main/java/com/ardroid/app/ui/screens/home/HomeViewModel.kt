@@ -229,7 +229,16 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setAvfHintDismissed(true) }
     }
 
-    fun startArDroid() = ArDroidService.start(context)
+    fun startArDroid() {
+        com.ardroid.app.util.StartDebug.mark(context, "BUTTON: startArDroid() tapped")
+        try {
+            ArDroidService.start(context)
+            com.ardroid.app.util.StartDebug.mark(context, "BUTTON: ArDroidService.start() returned OK")
+        } catch (e: Throwable) {
+            com.ardroid.app.util.StartDebug.mark(context, "BUTTON: ArDroidService.start() THREW ${e.javaClass.name}: ${e.message}")
+            throw e
+        }
+    }
 
     fun stopVm() = ArDroidService.stop(context)
 

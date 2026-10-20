@@ -91,11 +91,14 @@ jobs:
             echo "Run $LAST_ID has no squashfs artifact — full rebuild."
             exit 0
           fi
-          # Rebuild only if the rootfs inputs changed: the build scripts,
-          # systemd units, helpers, Dockerfile, or this workflow itself.
-          # Anything else (app code, docs) reuses the previous squashfs.
+          # Rebuild only if the rootfs inputs changed: everything under
+          # build-rootfs/ (build scripts, Dockerfile, systemd units,
+          # helpers). Workflow-file changes alone do NOT invalidate the
+          # rootfs — how the squashfs is built lives entirely in
+          # build-rootfs/. Anything else (app code, docs, workflow)
+          # reuses the previous squashfs.
           if git diff --quiet "$LAST_SHA" HEAD -- \
-                build-rootfs/ .github/workflows/build-apk.yml 2>/dev/null; then
+                build-rootfs/ 2>/dev/null; then
             echo "rebuild=false" >> "$GITHUB_OUTPUT"
             echo "reuse_run_id=$LAST_ID" >> "$GITHUB_OUTPUT"
             echo "reason=rootfs-inputs-unchanged" >> "$GITHUB_OUTPUT"
@@ -105,7 +108,7 @@ jobs:
             echo "reason=rootfs-inputs-changed" >> "$GITHUB_OUTPUT"
             echo "Rootfs inputs changed — full rebuild."
             git diff --name-only "$LAST_SHA" HEAD -- \
-              build-rootfs/ .github/workflows/build-apk.yml | head -10
+              build-rootfs/ | head -10
           fi
 
       - name: Free disk space
