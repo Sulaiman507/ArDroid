@@ -228,7 +228,6 @@ chmod 644 "$ROOTFS/etc/profile.d/ardroid-welcome.sh"
 # ── podroid helper scripts (portable sh; unchanged from Podroid) ─────────────
 mkdir -p "$ROOTFS/usr/local/bin"
 cp /build/files/usr/local/bin/podroid-resize  "$ROOTFS/usr/local/bin/"
-cp /build/files/usr/local/bin/podroid-login   "$ROOTFS/usr/local/bin/"
 cp /build/files/usr/local/bin/podroid-getty   "$ROOTFS/usr/local/bin/"
 cp /build/files/usr/local/bin/podroid-backup  "$ROOTFS/usr/local/bin/"
 # systemd service helpers (ported from the old OpenRC init.d scripts).

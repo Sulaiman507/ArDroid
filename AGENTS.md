@@ -105,7 +105,7 @@ On **AVF** there is no QMP and no PL011: the console is captured via `ConsoleFan
    - `podroid-downloads.service` - Downloads-folder sharing.
    - `podroid-x11.service` - Xvnc + PulseAudio for the X11 viewer.
    - `podroid-migrate.service` - one-shot guest migrations on version change.
-   - `podroid-getty@.service` - `agetty` on hvc0 via the `podroid-getty` wrapper (picks the tty from the `podroid.tty=` cmdline marker; Arch has `/sbin/agetty`, no `/sbin/getty`). **Never let another getty share hvc0:** `systemd-getty-generator` auto-creates `serial-getty@hvc0` whenever `/dev/hvc0` exists — that hidden twin raced this getty for console input and scrambled logins (split/lost keystrokes, echoed passwords, doubled prompts; root-caused 2026-10-20). It is masked twice: an `/etc/systemd/system/serial-getty@hvc0.service` → `/dev/null` symlink baked into the image by `build-rootfs.sh`, and `systemd.mask=serial-getty@hvc0.service` on the guest cmdline from both engines.
+   - `podroid-getty@.service` - plain `agetty` on hvc0 via the `podroid-getty` wrapper (picks the tty from the `podroid.tty=` cmdline marker; Arch has `/sbin/agetty`, no `/sbin/getty`). The wrapper also restores the winsize from `/run/term_size` via `stty -F` (moved here from the deleted `podroid-login`). **Never pass `-l` here:** the host-side bridge connects to the console after boot (QEMU's chardev discards whatever agetty printed before that) and then sends a lone-CR "kick"; plain agetty reads it as an empty login name and re-displays `/etc/issue` + the login prompt — that re-display is the ONLY `/etc/issue` the user ever sees. With `-l` the CR landed in `/bin/login` (which never prints `/etc/issue`) and the pre-login greeting stayed invisible (root-caused 2026-10-21). **Never let another getty share hvc0:** `systemd-getty-generator` auto-creates `serial-getty@hvc0` whenever `/dev/hvc0` exists — that hidden twin raced this getty for console input and scrambled logins (split/lost keystrokes, echoed passwords, doubled prompts; root-caused 2026-10-20). It is masked twice: an `/etc/systemd/system/serial-getty@hvc0.service` → `/dev/null` symlink baked into the image by `build-rootfs.sh`, and `systemd.mask=serial-getty@hvc0.service` on the guest cmdline from both engines.
    - `podroid-ready.service` - emits `Starting SSH...` / `Almost ready...` / `Ready!`, the markers `BootStageDetector` matches; `Ready!` flips state to `Running` and auto-starts the terminal bridge.
 4. Two greetings: **before login**, agetty prints `/etc/issue` (default login + tips); **after login**, `/etc/profile.d/ardroid-welcome.sh` prints the welcome banner. (The issue text was long suppressed with `--noissue` for 'unreliability' — that was actually the `serial-getty@hvc0` twin printing it at random times; with the twin masked it is deterministic again.)
 
@@ -188,7 +188,7 @@ Single-activity Compose app: `ui/navigation/NavGraph.kt` routes `setup → home 
 │   ├── host-bridge/                     # podroid-hostd.c (guest->Android bridge daemon + CLIs)
 │   └── files/                           # systemd units, helpers, configs baked into the squashfs
 │       ├── etc/systemd/system/          # 12 podroid-*.service units (+ podroid-getty@.service)
-│       └── usr/local/bin/               # podroid-getty, podroid-login, podroid-bootstrap, ...
+│       └── usr/local/bin/               # podroid-getty, podroid-bootstrap, ...
 ├── .github/workflows/build-apk.yml     # cloud build (workflow_dispatch): rootfs via Docker + assembleDebug
 └── README.md, CONTRIBUTING.md, CREDITS.md
 ```
