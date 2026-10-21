@@ -303,6 +303,11 @@ ln -sf /dev/null "$ROOTFS/etc/systemd/system/getty@tty1.service"
 # console input and scrambles logins (root-caused 2026-10-20). Mask it in the
 # image too (the engines also pass systemd.mask= on the kernel cmdline).
 ln -sf /dev/null "$ROOTFS/etc/systemd/system/serial-getty@hvc0.service"
+# systemd-getty-generator also auto-creates serial-getty@ttyAMA0 for the
+# kernel console (console=ttyAMA0 on QEMU). It cannot steal hvc0 input, but
+# mask it too so the generator can never surprise us with another mystery
+# getty — it was seen live on a device 2026-10-21.
+ln -sf /dev/null "$ROOTFS/etc/systemd/system/serial-getty@ttyAMA0.service"
 # Boot straight into multi-user (no graphical.target needed; Xvnc is a unit).
 ln -sf /usr/lib/systemd/system/multi-user.target \
     "$ROOTFS/etc/systemd/system/default.target"
