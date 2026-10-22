@@ -117,9 +117,6 @@
     <string name="vm_port">虚拟机端口</string>
     <string name="e_g_8080">例如：8080</string>
     <string name="e_g_80">例如：80</string>
-    <string name="tcp">TCP</string>
-    <string name="udp">UDP</string>
-    <string name="both">两者</string>
     <string name="enter_valid_ports">输入有效的端口号 (1-65535)</string>
     <string name="port_already_forwarded">端口 %1$d (%2$s) 已转发</string>
     <string name="port_reserved">端口 %1$d 已保留给应用内桌面</string>
@@ -250,9 +247,6 @@
     <string name="sharing">共享</string>
 
     <!-- Terminal -->
-    <string name="paste_text">粘贴</string>
-    <string name="copy_text">复制</string>
-    <string name="text_selection_more">更多…</string>
     <string name="terminal_title">终端</string>
     <string name="vm_not_running_hint">请先从主屏幕启动虚拟机。</string>
     <string name="back_to_home">返回主屏幕</string>
