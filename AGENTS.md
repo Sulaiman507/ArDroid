@@ -221,7 +221,7 @@ The terminal emulator JNI is built from the vendored `terminal-emulator` module 
   - *Rootfs reuse:* if `build-rootfs/` and the workflow file are unchanged since the last successful run, the `arch-rootfs.squashfs` is downloaded from that run's `arch-rootfs-squashfs` artifact instead of rebuilding (~15 min vs ~3h). Every run re-uploads the squashfs to keep the chain alive.
   - *box64 package cache:* `actions/cache` keyed on the AUR HEAD sha; `build-rootfs.sh` installs `/build/box64-prebuilt.pkg.tar.zst` when valid, else compiles from the AUR and exports the package for the next run (~1.5h saved).
 - **`build-rootfs/Dockerfile.rootfs`** - fetches the Arch Linux ARM aarch64 tarball, runs `build-rootfs.sh`: `pacman -Syu` (base + systemd + podman + docker + lxc + dropbear + openssh + tigervnc + pulseaudio + ...), builds **box64 from the AUR** as a throwaway `builder` user (build deps installed `--asdeps`, orphan-swept after; `sudo`/`gzip` re-marked `--asexplicit` so the sweep can't remove them), writes `/etc/issue` + `/etc/profile.d/ardroid-welcome.sh`, sets the root password hash, installs the 12 systemd units + helpers, then `mksquashfs -comp zstd`. A build-time check `unsquashfs -l`s the image and **fails the build** if `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, or `/usr/bin/box64` are missing.
-- The local `Dockerfile` / `build-all.sh` kernel+QEMU stages are **legacy** - the kernel and QEMU are prebuilt and reused; do not spend time on kernel configs.
+- The root `Dockerfile`, `podroid_kernel.config` and the `build-all.sh` kernel/QEMU stages were **deleted** (2026-10-22 cleanup) - the kernel and QEMU are prebuilt and reused; there is nothing to tune in the repo.
 
 ## Performance tuning (TCG path; KVM is impossible without root)
 
@@ -229,7 +229,7 @@ In `QemuEngine.buildCommand()`: `tcg,thread=multi`, larger `tb-size` for ≥2GB 
 
 ## Quirks & gotchas
 
-- **The kernel is prebuilt - repo kernel configs are inert.** Don't tune `podroid_kernel.config`; it changes nothing in the shipped APK.
+- **The kernel is prebuilt - there are no kernel configs in the repo.** (`podroid_kernel.config` was deleted 2026-10-22.) Kernel changes require rebuilding the prebuilt kernel outside this repo; nothing here affects the shipped kernel.
 - **pacman needs `DisableSandbox`.** The reused kernel lacks Landlock, so pacman 7's sandbox fails with "restricting filesystem access failed". `DisableSandbox` is set in the builder's `pacman.conf` AND baked into the guest image at `$ROOTFS/etc/pacman.conf`. If `pacman -Syu` in the guest ever fails with a sandbox error, this line is missing.
 - **`mksquashfs -e` consumes every argument after it.** Pseudo-dir defs (`-p "/proc d 555 0 0"`) must come BEFORE `-e`, or they silently become excludes and the guest panics at boot (`mount --move /proc failed`). The Dockerfile fails fast on this.
 - **Arch has `/sbin/agetty`, not `/sbin/getty`.** The old busybox path crashes the getty in a restart loop.
