@@ -11,7 +11,7 @@ plugins {
     alias(libs.plugins.hilt.android)
 }
 
-val podroidQemuVersion = providers.gradleProperty("podroidQemuVersion").get()
+val ardroidQemuVersion = providers.gradleProperty("ardroidQemuVersion").get()
 
 android {
     namespace = "com.ardroid.app"
@@ -27,7 +27,7 @@ android {
         targetSdk = 36
         versionCode = 33
         versionName = "1.2.9"
-        buildConfigField("String", "QEMU_VERSION", "\"$podroidQemuVersion\"")
+        buildConfigField("String", "QEMU_VERSION", "\"$ardroidQemuVersion\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
