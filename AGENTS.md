@@ -19,7 +19,7 @@ It is a fork of [Podroid](https://github.com/ExTV/Podroid) (ExTV/Podroid@ce01218
 
 | | |
 |---|---|
-| Package | `com.excp.podroid` (debug: `com.excp.podroid.debug`) - rebrand deferred |
+| Package | `com.ardroid.app` (debug: `com.ardroid.app.debug`) |
 | Version | `versionName` / `versionCode` in `app/build.gradle.kts` |
 | Min / target SDK | 26 (Android 8) / 36 |
 | Architecture | arm64 (`aarch64`) only |
@@ -51,8 +51,8 @@ It is a fork of [Podroid](https://github.com/ExTV/Podroid) (ExTV/Podroid@ce01218
 
 **Monitor VM boot:**
 ```bash
-adb logcat -s PodroidQemu
-adb shell run-as com.excp.podroid.debug cat files/console.log   # debug build
+adb logcat -s QemuEngine
+adb shell run-as com.ardroid.app.debug cat files/console.log   # debug build
 ```
 
 Native binaries require **16KB page alignment** (`-Wl,-z,max-page-size=16384`) - mandatory on Android 13+.
@@ -113,13 +113,13 @@ On **AVF** there is no QMP and no PL011: the console is captured via `ConsoleFan
 
 ### Guest → Android host bridge
 
-Lets guest processes call back to Android. Guest side: `podroid-hostd` (multi-call C binary, `build-rootfs/host-bridge/podroid-hostd.c`) owns a guest-local `AF_UNIX` socket `/run/podroid-host.sock`; `argv[0]` dispatch also exposes it as `podroid-notify` and `podroid-forward` (symlinks). The daemon relays one request line / one response line to Android over a backend transport: `/dev/hvc2` on QEMU, `AF_VSOCK:9101` on AVF (chosen by the `podroid.backend=avf` cmdline marker). Android side: `engine/hostbridge/` - `HostRequestServer` reads requests over a `HostTransport` (`QemuHostTransport` via `LocalSocket` to `host.sock`, or `AvfHostTransport` via `connectVsock`), `HostRequestDispatcher` parses them, and routes to `NotificationPoster` (posts via `NotificationManagerCompat`) or `PortForwardRepository` (rules persist and `EngineHolder` applies them live). `PodroidService` starts/stops the server over the VM lifecycle. Stop or parent cancellation shuts down the active transport to unblock reads; a transport returned by a late native connect is closed without dispatching. Android accepts only complete UTF-8 request lines up to 8191 bytes (matching the guest buffer). Free-text fields are base64 (`HostProtocol.kt`) so UTF-8 survives. The daemon also self-originates a `STATS containers=<n>` push (inotify-driven, debounced) whenever the podman container count changes, which `HostRequestDispatcher` persists to the `last_container_count` DataStore key for `HomeViewModel` to show live on Home - the same channel on both backends, no polling.
+Lets guest processes call back to Android. Guest side: `podroid-hostd` (multi-call C binary, `build-rootfs/host-bridge/podroid-hostd.c`) owns a guest-local `AF_UNIX` socket `/run/podroid-host.sock`; `argv[0]` dispatch also exposes it as `podroid-notify` and `podroid-forward` (symlinks). The daemon relays one request line / one response line to Android over a backend transport: `/dev/hvc2` on QEMU, `AF_VSOCK:9101` on AVF (chosen by the `podroid.backend=avf` cmdline marker). Android side: `engine/hostbridge/` - `HostRequestServer` reads requests over a `HostTransport` (`QemuHostTransport` via `LocalSocket` to `host.sock`, or `AvfHostTransport` via `connectVsock`), `HostRequestDispatcher` parses them, and routes to `NotificationPoster` (posts via `NotificationManagerCompat`) or `PortForwardRepository` (rules persist and `EngineHolder` applies them live). `ArDroidService` starts/stops the server over the VM lifecycle. Stop or parent cancellation shuts down the active transport to unblock reads; a transport returned by a late native connect is closed without dispatching. Android accepts only complete UTF-8 request lines up to 8191 bytes (matching the guest buffer). Free-text fields are base64 (`HostProtocol.kt`) so UTF-8 survives. The daemon also self-originates a `STATS containers=<n>` push (inotify-driven, debounced) whenever the podman container count changes, which `HostRequestDispatcher` persists to the `last_container_count` DataStore key for `HomeViewModel` to show live on Home - the same channel on both backends, no polling.
 
 > **Gotcha:** `/dev/hvc2` is a virtio-console **TTY** that defaults to echo on. The daemon must `cfmakeraw()` it, or the TTY echoes Android's responses back and the protocol desyncs after the first request. AVF (a raw vsock socket) is unaffected.
 
 ### Downloads sharing over 9p (`engine/avf/AvfDownloadsShare.kt` + `engine/avf/ninep/`)
 
-**AVF only.** Serves the real Android Downloads directory into the guest by running an in-process **9p2000.L** server (`Ninep2000LServer.kt`, ~886 LoC; wire format in `NinepCodec.kt`) over vsock. This is why the guest can read and write user files without the app holding broad storage permissions, and it is how `podroid-backup` archives land in `Downloads/Podroid/backups` for `ContainerBackupRepository` to list.
+**AVF only.** Serves the real Android Downloads directory into the guest by running an in-process **9p2000.L** server (`Ninep2000LServer.kt`, ~886 LoC; wire format in `NinepCodec.kt`) over vsock. This is why the guest can read and write user files without the app holding broad storage permissions, and it is how `podroid-backup` archives land in `Downloads/ArDroid/backups` for `ContainerBackupRepository` to list.
 
 There is no QEMU equivalent, so any feature built on the share is backend-asymmetric by construction and must degrade cleanly on QEMU.
 
@@ -149,9 +149,9 @@ Single-activity Compose app: `ui/navigation/NavGraph.kt` routes `setup → home 
 /
 ├── app/                              # Android module
 │   └── src/main/
-│       ├── java/com/excp/podroid/
+│       ├── java/com/ardroid/app/
 │       │   ├── MainActivity.kt           # single Activity, locale wrap, WindowSizeClass
-│       │   ├── PodroidApplication.kt     # Hilt app, asset extraction on first run
+│       │   ├── ArDroidApplication.kt     # Hilt app, asset extraction on first run
 │       │   ├── engine/
 │       │   │   ├── VmEngine.kt           # backend interface
 │       │   │   ├── EngineHolder.kt       # Hilt binding; routes to current engine; port-forward diff

@@ -38,6 +38,7 @@ import com.termux.terminal.TerminalColors
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.lifecycle.ViewModel
+import kotlin.jvm.Volatile
 import androidx.lifecycle.viewModelScope
 import com.ardroid.app.data.repository.SettingsRepository
 import com.ardroid.app.engine.VmEngine
@@ -100,8 +101,8 @@ class TerminalViewModel @Inject constructor(
     val reconnectExhausted: StateFlow<Boolean> = _reconnectExhausted
 
     // Auto-reconnect governor state (see onSessionFinished + companion bounds).
-    private var reconnectAttempts = 0
-    private var reconnectWindowStartMs = 0L
+    @Volatile private var reconnectAttempts = 0
+    @Volatile private var reconnectWindowStartMs = 0L
 
     init {
         // Each fresh VM run starts with a clean governor, and a stale "exhausted"

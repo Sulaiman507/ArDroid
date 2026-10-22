@@ -182,14 +182,25 @@ class ArDroidService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // App swiped from recents — stop the VM gracefully and tear the service
-        // down unconditionally. engine.stop() is a no-op if idle; doing this even
-        // in the Idle-before-Starting window prevents a swipe during early start
-        // from leaving a VM that starts with no UI, holding the WakeLock.
+        // App swiped from recents — stop the VM gracefully. engine.stop() is a
+        // no-op if idle. Mirror the ACTION_STOP path: if the VM was active,
+        // engine.stop() kicks off an async best-effort guest flush on the
+        // engine's own scope and returns immediately — keep the WakeLock held
+        // and let the shutdown observer run teardown() (release + stopSelf)
+        // once the engine reaches Stopped/Error. Releasing it here would let
+        // the CPU suspend mid-flush with the screen off, risking ext4
+        // corruption. Only tear down immediately when the engine never became
+        // active (e.g. a swipe during early start with no UI yet).
+        val wasActive = engine.state.value is VmState.Starting ||
+            engine.state.value is VmState.Running
         engine.stop()
-        releaseWakeLock()
-        stopForegroundCompat()
-        stopSelf()
+        if (wasActive) {
+            Log.d(TAG, "onTaskRemoved: VM active — deferring teardown to state observer")
+        } else {
+            releaseWakeLock()
+            stopForegroundCompat()
+            stopSelf()
+        }
     }
 
     private fun acquireWakeLock() {
@@ -426,7 +437,7 @@ class ArDroidService : Service() {
             "ArDroid Service",
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Shows the status of the Podman VM"
+            description = "Shows the status of the ArDroid VM"
             setShowBadge(false)
         }
         getSystemService(NotificationManager::class.java)

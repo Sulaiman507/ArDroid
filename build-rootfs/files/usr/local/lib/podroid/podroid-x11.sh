@@ -48,6 +48,23 @@ if ! kill -0 "$_xvnc_pid" 2>/dev/null; then
     exit 1
 fi
 
+# Supervise Xvnc for the rest of the VM's life. The liveness poll above
+# only covers startup (~1s); if Xvnc dies later (crash, OOM under memory
+# pressure) the unit would stay "active" (pulseaudio alive) with a silently
+# dead X11 display. This monitor restarts it.
+(
+_XVNC_ARGS="$XVNC_DISPLAY -geometry $XVNC_GEOMETRY -depth 24 -SecurityTypes None -localhost no -rfbport $XVNC_PORT -AlwaysShared -dpi $XVNC_DPI -AcceptSetDesktopSize"
+while true; do
+    sleep 15
+    if ! kill -0 "$_xvnc_pid" 2>/dev/null; then
+        echo "podroid-x11: Xvnc died, restarting" > /dev/console
+        # shellcheck disable=SC2086
+        /usr/bin/Xvnc $_XVNC_ARGS >>"$XVNC_LOGFILE" 2>&1 &
+        _xvnc_pid=$!
+    fi
+done
+) &
+
 # PulseAudio in the foreground: --system=no with an explicit runtime dir so
 # it runs as root without tripping pulse's "system mode is risky" refusal.
 # Stdout goes to the unit's log (pulse.log) via StandardOutput=.
