@@ -26,7 +26,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 33
-        versionName = "1.2.9"
+        versionName = "1.0.0"
         buildConfigField("String", "QEMU_VERSION", "\"$ardroidQemuVersion\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
