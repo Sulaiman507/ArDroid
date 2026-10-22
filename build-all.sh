@@ -1,7 +1,8 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────────────────────
-# Podroid Unified Build & Deploy Script
-# Coordinates kernel, initramfs, rootfs, QEMU, and APK builds.
+# ArDroid Local Build & Deploy Script
+# Coordinates rootfs and APK builds. (Kernel, initramfs and QEMU are
+# prebuilt and reused from the Podroid release APK — see the cloud workflow.)
 # (libtermux.so is no longer built here — the vendored terminal-emulator
 #  module compiles it via AGP's NDK build using src/main/jni/Android.mk.)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -26,16 +27,13 @@ success() { printf "${GREEN}SUCCESS:${NC} %s\n" "$*"; }
 # ── Help ──────────────────────────────────────────────────────────────────────
 show_help() {
     cat <<EOF
-Podroid Unified Build Tool
+ArDroid Build Tool
 
 Usage: $0 [command] [options]
 
 Commands:
-  all           Build everything (Kernel, Initramfs, Rootfs, QEMU, APK)
-  kernel        Build custom kernel only (podroid_kernel.config + Linux source)
-  initramfs     Build custom kernel + Alpine VM initramfs (vmlinuz + initrd)
+  all           Build everything (Rootfs, APK)
   rootfs        Build Arch Linux ARM rootfs squashfs (arch-rootfs.squashfs)
-  qemu          Build QEMU + podroid-bridge + podroid-launcher
   apk           Build the Android APK (also builds libtermux.so via Gradle NDK)
   deploy        Build APK, uninstall old version, and install to device
   test          Perform full build, install, and automated boot validation
@@ -85,40 +83,6 @@ EOF
 
 # ── Build Functions ───────────────────────────────────────────────────────────
 
-build_kernel() {
-    local kernel_ver
-    kernel_ver=$(grep -E '^podroidKernelVersion=' "${SCRIPT_DIR}/gradle.properties" | cut -d= -f2)
-    log "Building custom kernel ${kernel_ver} for aarch64 (Docker)..."
-    docker build --network=host \
-        --build-arg "KERNEL_VERSION=${kernel_ver}" \
-        -t podroid-kernel-builder --target kernel-builder "$SCRIPT_DIR"
-    log "Extracting kernel artifact..."
-    docker rm -f podroid-kernel-extract 2>/dev/null || true
-    docker create --name podroid-kernel-extract podroid-kernel-builder
-    mkdir -p "$ASSETS"
-    docker cp podroid-kernel-extract:/output/vmlinuz-virt "$ASSETS/vmlinuz-virt"
-    docker rm podroid-kernel-extract >/dev/null
-    success "Custom kernel ready."
-}
-
-build_initramfs() {
-    local kernel_ver
-    kernel_ver=$(grep -E '^podroidKernelVersion=' "${SCRIPT_DIR}/gradle.properties" | cut -d= -f2)
-    log "Building custom kernel + Alpine Initramfs (Docker)..."
-    docker build --network=host \
-        --build-arg "KERNEL_VERSION=${kernel_ver}" \
-        -t podroid-builder --target packer "$SCRIPT_DIR"
-
-    log "Extracting initramfs artifacts..."
-    docker rm podroid-extract 2>/dev/null || true
-    docker create --name podroid-extract podroid-builder /bin/true
-    mkdir -p "$ASSETS"
-    docker cp podroid-extract:/output/vmlinuz-virt "$ASSETS/vmlinuz-virt"
-    docker cp podroid-extract:/output/initrd.img "$ASSETS/initrd.img"
-    docker rm podroid-extract >/dev/null
-    success "Kernel + initramfs ready."
-}
-
 build_rootfs() {
     log "Building Arch Linux ARM rootfs squashfs..."
     local sysver
@@ -129,31 +93,6 @@ build_rootfs() {
         --output type=local,dest="${ASSETS}" \
         "${SCRIPT_DIR}/build-rootfs/"
     success "Built ${ASSETS}/arch-rootfs.squashfs ($(du -h "${ASSETS}/arch-rootfs.squashfs" | cut -f1)), system-version ${sysver:-0}"
-}
-
-build_qemu() {
-    local qemu_ver
-    qemu_ver=$(grep -E '^podroidQemuVersion=' "${SCRIPT_DIR}/gradle.properties" | cut -d= -f2)
-    log "Building QEMU ${qemu_ver} for Android ARM64 (Docker)..."
-    
-    docker build --build-arg "QEMU_VERSION=${qemu_ver}" \
-        -t podroid-qemu-builder --target final "${SCRIPT_DIR}"
-        
-    log "Extracting QEMU artifacts..."
-    docker rm -f podroid-qemu-extract 2>/dev/null || true
-    docker create --name podroid-qemu-extract podroid-qemu-builder /bin/true
-    
-    mkdir -p "$JNILIBS" "$ASSETS/qemu/keymaps"
-    docker cp podroid-qemu-extract:/libqemu-system-aarch64.so "$JNILIBS/"
-    docker cp podroid-qemu-extract:/libslirp.so               "$JNILIBS/"
-    docker cp podroid-qemu-extract:/libpodroid-bridge.so      "$JNILIBS/"
-    docker cp podroid-qemu-extract:/libpodroid-launcher.so    "$JNILIBS/"
-    docker cp podroid-qemu-extract:/qemu/efi-virtio.rom        "$ASSETS/qemu/"
-    docker cp podroid-qemu-extract:/qemu/keymaps/.             "$ASSETS/qemu/keymaps/"
-    docker rm podroid-qemu-extract >/dev/null
-    
-    verify_16kb_align "$JNILIBS/libqemu-system-aarch64.so"
-    success "QEMU and bridge ready."
 }
 
 build_apk() {
@@ -169,8 +108,8 @@ deploy_apk() {
 }
 
 run_boot_test() {
-    local pkg="com.excp.podroid.debug"
-    local activity="com.excp.podroid.MainActivity"
+    local pkg="com.ardroid.app.debug"
+    local activity="com.ardroid.app.MainActivity"
     local timeout=60
     
     log "Starting Automated Boot Test..."
@@ -191,7 +130,7 @@ run_boot_test() {
     log "Launching App..."
     adb shell am start -n "$pkg/$activity" >/dev/null 2>&1
     
-    echo -e "${YELLOW}>>> PLEASE PRESS 'Start Podman' IN THE APP NOW <<<${NC}"
+    echo -e "${YELLOW}>>> PLEASE PRESS 'Start VM' IN THE APP NOW <<<${NC}"
     
     # Poll console log
     log "Waiting for VM to boot (timeout: ${timeout}s)..."
@@ -240,23 +179,18 @@ run_boot_test() {
 [ $# -eq 0 ] && { show_help; exit 1; }
 
 case "$1" in
-    kernel)    build_kernel ;;
-    initramfs) build_initramfs ;;
     rootfs)    build_rootfs ;;
-    qemu)      build_qemu ;;
     apk)       build_apk ;;
     deploy)    build_apk && deploy_apk ;;
     test)      run_boot_test ;;
     all)
-        build_initramfs
         build_rootfs
-        build_qemu
         build_apk
         ;;
     clean)
         log "Cleaning up..."
         ./gradlew clean
-        docker rmi podroid-builder podroid-qemu-builder podroid-rootfs:latest 2>/dev/null || true
+        docker rmi podroid-rootfs:latest 2>/dev/null || true
         success "Cleaned."
         ;;
     *)
