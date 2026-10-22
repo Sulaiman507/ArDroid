@@ -49,7 +49,7 @@ if [ "$TTY" = "$WANT" ]; then
     # exec agetty — the greeting is then printed exactly once, to a live
     # terminal, the instant the bridge attaches.
     # Only on the first start after boot (flag in /run, cleared on reboot):
-    # restarts (logout) must NOT wait — the bridge is already
+    # restarts (logout, login timeout) must NOT wait — the bridge is already
     # attached and will not re-kick. The 30s timeout covers the in-guest
     # reboot case, where the already-connected bridge stays silent; we then
     # proceed anyway and the bridge is attached there too.
@@ -76,18 +76,17 @@ if [ "$TTY" = "$WANT" ]; then
     # a name itself, the CR landed in /bin/login (which never prints
     # /etc/issue), and the greeting stayed invisible forever (root-caused
     # 2026-10-21; podroid-login deleted, its winsize fix moved above).
-    # NOTE: -t 30 (login timeout) was REMOVED 2026-10-22. It was the old
-    # safety net for the boot race, but combined with systemd Restart=always
-    # it made every idle prompt exit after 30s and re-print the banner in an
-    # endless loop (seen on-device: the greeting repeated over and over).
-    # It is obsolete now: the kick-wait gate above guarantees agetty only
-    # starts once the bridge is attached, so the greeting prints exactly
-    # once and the prompt then waits for input indefinitely. Restarts now
-    # happen only on real logout (Restart=always), which correctly shows a
-    # fresh banner + prompt.
+    # NOTE: -t 120 (2-minute login timeout), set 2026-10-22 per the user's
+    # explicit request ("خلي المدة دقيقتين"). Plain consequence: combined with
+    # systemd Restart=always, an idle prompt exits every 120s and the banner
+    # re-prints — the same repetition seen with -t 30, just 4x slower. That
+    # is standard getty behavior. (The -t 30 boot-race safety net became
+    # obsolete once the kick-wait gate above guaranteed agetty only starts
+    # after the bridge attaches; the timeout now exists purely because the
+    # user wants a bounded idle wait, not an endless one.)
     # NOTE: Arch ships agetty as /sbin/agetty (via /sbin -> /usr/bin);
 # there is no /sbin/getty on Arch (that was Alpine/busybox).
-    exec /sbin/agetty -L 115200 "$TTY" xterm-256color
+    exec /sbin/agetty -L -t 120 115200 "$TTY" xterm-256color
 fi
 
 # Wrong tty for this backend. Sleep instead of exiting so busybox init
