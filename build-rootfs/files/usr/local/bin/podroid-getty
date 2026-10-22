@@ -38,6 +38,27 @@ if [ "$TTY" = "$WANT" ]; then
     # so the device is addressed explicitly.
     stty -F "/dev/$TTY" rows "$_r" cols "$_c" 2>/dev/null
 
+    # Synchronize with the host-side terminal bridge before starting agetty.
+    # The bridge sends a lone CR when it connects; QEMU's chardev
+    # (server=on,wait=off) discards anything printed before that moment, so
+    # starting agetty earlier prints /etc/issue into the void. Worse, agetty
+    # frees the issue text from memory after its first print, so the CR kick
+    # arriving later only re-displays an empty prompt (root-caused 2026-10-22
+    # from util-linux agetty-cmd/issuefile.c: print frees ie->mem).
+    # We therefore wait for the kick here (consuming the byte) and only then
+    # exec agetty — the greeting is then printed exactly once, to a live
+    # terminal, the instant the bridge attaches.
+    # Only on the first start after boot (flag in /run, cleared on reboot):
+    # restarts (logout, login timeout) must NOT wait — the bridge is already
+    # attached and will not re-kick. The 30s timeout covers the in-guest
+    # reboot case, where the already-connected bridge stays silent; we then
+    # proceed anyway and the bridge is attached there too.
+    if [ ! -e /run/ardroid-getty-kicked ]; then
+        stty -F "/dev/$TTY" -echo 2>/dev/null
+        timeout 30 dd if="/dev/$TTY" of=/dev/null bs=1 count=1 2>/dev/null
+        : > /run/ardroid-getty-kicked
+    fi
+
     # NOTE: no screen-clear here. A clear sequence before agetty used to wipe
     # the login banner on some terminals (it was only needed on AVF, where
     # boot markers share hvc0).
