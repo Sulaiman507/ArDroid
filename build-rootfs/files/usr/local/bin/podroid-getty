@@ -57,6 +57,13 @@ if [ "$TTY" = "$WANT" ]; then
         stty -F "/dev/$TTY" -echo 2>/dev/null
         timeout 30 dd if="/dev/$TTY" of=/dev/null bs=1 count=1 2>/dev/null
         : > /run/ardroid-getty-kicked
+        # Give the host-side terminal session a moment to attach and start
+        # displaying. The kick means the bridge socket connected, but agetty
+        # printing /etc/issue in the same millisecond can land before the
+        # session is ready, losing the banner (diagnosed 2026-10-23: the
+        # login prompt survived only because it prints slightly later).
+        # 2s affects first boot only; restarts skip this block entirely.
+        sleep 2
     fi
 
     # NOTE: no screen-clear here. A clear sequence before agetty used to wipe
