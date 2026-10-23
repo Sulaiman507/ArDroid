@@ -321,10 +321,10 @@
     <string name="usb_passthrough_description">可选。在虚拟机运行时热插拔外部 USB 设备（Wi-Fi、存储、串口等）。</string>
     <string name="enable_usb_passthrough">启用 USB 设备直通</string>
     <string name="usb_devices_section">设备</string>
-    <string name="usb_passthrough_available">插入设备时会询问您的许可。为虚拟机添加 USB 控制器，会带来少量模拟开销，如果不需要可保持关闭。您可在设置中随时更改。</string>
+    <string name="usb_passthrough_available">插入设备时会询问您的许可。键盘、鼠标、触控板和触摸屏保留给手机使用。为虚拟机添加 USB 控制器，会带来少量模拟开销，如果不需要可保持关闭。您可在设置中随时更改。</string>
     <string name="usb_passthrough_unavailable">此后端不可用：USB 设备直通需要 QEMU 控制套接字，而 AVF 后端不提供此功能。您可在设置中随时更改。</string>
     <string name="usb_passthrough_settings_label">USB 设备直通</string>
-    <string name="usb_passthrough_settings_description_available">在虚拟机中热插拔外部 USB 设备（Wi-Fi、存储、串口等）。设备连接时会询问许可。启动时添加 USB 控制器，因此需要重启虚拟机以应用更改。</string>
+    <string name="usb_passthrough_settings_description_available">在虚拟机中热插拔外部 USB 设备（Wi-Fi、存储、串口等）。设备连接时会询问许可；键盘、鼠标等输入设备保留给手机使用。启动时添加 USB 控制器，因此需要重启虚拟机以应用更改。</string>
     <string name="usb_passthrough_settings_description_unavailable">%1$s 后端不可用：USB 设备直通需要 QEMU 的 QMP 控制套接字，而 AVF 后端不提供此功能。</string>
     <string name="server_mode">服务器模式</string>
     <string name="server_mode_desc">在屏幕变黑的情况下保持虚拟机运行以省电。应用会保持在前台，因此虚拟机不会被停止。要退出，请在任意位置长按 3 秒。</string>

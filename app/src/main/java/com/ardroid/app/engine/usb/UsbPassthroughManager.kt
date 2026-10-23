@@ -24,6 +24,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
@@ -137,6 +138,11 @@ class UsbPassthroughManager @Inject constructor(
 
     private fun requestAndAttach(device: UsbDevice) {
         if (active.containsKey(device.deviceName)) return
+        val interfaceClasses = (0 until device.interfaceCount).map { device.getInterface(it).interfaceClass }
+        if (!isPassthroughCandidate(device.deviceClass, interfaceClasses)) {
+            Log.i(TAG, "Keeping input device ${device.deviceName} with Android (HID interface)")
+            return
+        }
         if (usbManager.hasPermission(device)) {
             scope.launch { attach(device) }
         } else {
@@ -237,5 +243,16 @@ class UsbPassthroughManager @Inject constructor(
     companion object {
         private const val TAG = "UsbPassthrough"
         private const val ACTION_USB_PERMISSION = "com.ardroid.app.action.USB_PERMISSION"
+
+        /**
+         * Whether a device may be handed to the guest. usb-host takes the whole
+         * device, so anything exposing a HID interface (keyboard, mouse,
+         * trackpad, touchscreen, often bundled in a dock alongside other
+         * functions) is kept with Android: passing it through would leave the
+         * phone with no input.
+         */
+        fun isPassthroughCandidate(deviceClass: Int, interfaceClasses: List<Int>): Boolean =
+            deviceClass != UsbConstants.USB_CLASS_HID &&
+                interfaceClasses.none { it == UsbConstants.USB_CLASS_HID }
     }
 }

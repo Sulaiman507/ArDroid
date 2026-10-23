@@ -74,11 +74,30 @@ object HostMetrics {
         file.length()
     }
 
-    fun processPid(process: Process): Int? = try {
-        val m = Process::class.java.getMethod("pid")
-        (m.invoke(process) as Int).takeIf { it > 0 }
-    } catch (_: Exception) {
-        null
+    /**
+     * PID of a direct child of [parentPid] whose argv[0] file name is one of
+     * [executableNames], or null. Android's java.lang.Process has no pid()
+     * (a Java 9 API absent from libcore), so the emulator's PID is found by
+     * scanning /proc instead. Entries that vanish or are unreadable mid-scan
+     * are skipped: processes exit while we walk the directory.
+     */
+    fun childPidByExecutable(
+        parentPid: Int,
+        executableNames: Set<String>,
+        procRoot: File = File("/proc"),
+    ): Int? {
+        val entries = procRoot.listFiles() ?: return null
+        for (dir in entries) {
+            val pid = dir.name.toIntOrNull() ?: continue
+            val stat = runCatching { File(dir, "stat").readText() }.getOrNull() ?: continue
+            // "pid (comm) state ppid ..."; comm may contain spaces or ')'.
+            val ppid = stat.substringAfterLast(')').trim().split(' ').getOrNull(1)?.toIntOrNull()
+            if (ppid != parentPid) continue
+            val argv0 = runCatching { File(dir, "cmdline").readText() }.getOrNull()
+                ?.substringBefore('\u0000') ?: continue
+            if (argv0.substringAfterLast('/') in executableNames) return pid
+        }
+        return null
     }
 
     /** VmRSS from /proc/[pid]/status, in megabytes. */

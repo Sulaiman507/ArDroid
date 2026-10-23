@@ -320,10 +320,10 @@
     <string name="usb_passthrough_description">Optional. Hot-plug external USB devices (Wi-Fi, storage, serial, etc.) into the VM at runtime.</string>
     <string name="enable_usb_passthrough">Enable USB passthrough</string>
     <string name="usb_devices_section">Devices</string>
-    <string name="usb_passthrough_available">Each device asks for permission when you plug it in. Adds a USB controller to the VM, which costs a little emulation overhead, so leave it off if you do not need it. You can change this later in Settings.</string>
+    <string name="usb_passthrough_available">Each device asks for permission when you plug it in. Keyboards, mice, trackpads and touchscreens stay with the phone. Adds a USB controller to the VM, which costs a little emulation overhead, so leave it off if you do not need it. You can change this later in Settings.</string>
     <string name="usb_passthrough_unavailable">Not available on this backend: USB passthrough needs QEMU control socket, which the AVF backend does not provide. You can change this later in Settings.</string>
     <string name="usb_passthrough_settings_label">USB passthrough</string>
-    <string name="usb_passthrough_settings_description_available">Hot-plugs external USB devices (Wi-Fi, storage, serial, etc.) into the VM. Each device asks for permission when attached. Adds a USB controller at boot, so restart the VM to apply.</string>
+    <string name="usb_passthrough_settings_description_available">Hot-plugs external USB devices (Wi-Fi, storage, serial, etc.) into the VM. Each device asks for permission when attached; keyboards, mice and other input devices stay with the phone. Adds a USB controller at boot, so restart the VM to apply.</string>
     <string name="usb_passthrough_settings_description_unavailable">Not available on the %1$s backend: USB passthrough rides QEMU\'s QMP control socket, which the AVF backend doesn\'t provide.</string>
     <string name="server_mode">Server mode</string>
     <string name="server_mode_desc">Keeps the VM running with the screen blacked out to save power. The app stays in the foreground so the VM is never stopped. To exit, press and hold anywhere for 3 seconds.</string>

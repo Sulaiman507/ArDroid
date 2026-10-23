@@ -82,14 +82,28 @@ class QemuEngine @Inject constructor(
     override val runningSinceMs: Long? get() = _runningSinceMs
 
     override fun emulatorRssMb(): Long? {
-        val proc = process?.takeIf { it.isAlive } ?: return null
-        val pid = HostMetrics.processPid(proc) ?: return null
+        val pid = emulatorPid() ?: return null
         return HostMetrics.processVmRssMb(pid)
     }
 
+    // The PID found for the current QEMU process; reset when `process` changes.
+    @Volatile
+    private var pidCache: Pair<Process, Int>? = null
+
     override fun emulatorPid(): Int? {
         val proc = process?.takeIf { it.isAlive } ?: return null
-        return HostMetrics.processPid(proc)
+        pidCache?.let { (p, pid) -> if (p === proc) return pid }
+        // libpodroid-launcher execv()s QEMU, so both names refer to the same PID.
+        val pid = HostMetrics.childPidByExecutable(
+            android.os.Process.myPid(),
+            setOf("libpodroid-launcher.so", "libqemu-system-aarch64.so"),
+        )
+        if (pid == null) {
+            Log.w(TAG, "QEMU is running but its PID was not found in /proc")
+            return null
+        }
+        pidCache = proc to pid
+        return pid
     }
 
     @Volatile
