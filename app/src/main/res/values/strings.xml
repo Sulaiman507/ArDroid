@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Podroid - Rootless Podman for Android
-  Copyright (C) 2024-2026 Podroid contributors
+  ArDroid - Rootless Podman for Android
+  Copyright (C) 2024-2026 ArDroid contributors
 -->
 <resources>
-    <string name="app_name">Podroid</string>
+    <string name="app_name">ArDroid</string>
 
     <!-- VM Status -->
     <string name="vm_status">VM Status</string>
@@ -56,7 +56,7 @@
     <string name="ram_label">RAM</string>
     <string name="network_label">Network</string>
     <string name="ssh_access">SSH access</string>
-    <string name="ssh_password_hint">ssh root@&lt;phone-ip&gt; -p 9922   (password: podroid)</string>
+    <string name="ssh_password_hint">ssh root@&lt;phone-ip&gt; -p 9922   (password: root)</string>
     <string name="load_balance">Load balance</string>
     <string name="load_balance_description">Automatically tune CPU, RAM, storage, and bandwidth for this device.</string>
     <string name="load_balance_storage_hint">Storage size is set automatically. Turn off load balance on the next step to pick manually.</string>
@@ -79,7 +79,7 @@
     <string name="stop_vm_to_change">Stop the VM to change these settings.</string>
     <string name="storage">Storage</string>
     <string name="autostart_on_boot">Start VM on boot</string>
-    <string name="autostart_on_boot_desc">Boot the VM automatically after the phone starts. Automation apps can also trigger it with the intent actions com.excp.podroid.action.START_VM and STOP_VM.</string>
+    <string name="autostart_on_boot_desc">Boot the VM automatically after the phone starts. Automation apps can also trigger it with the intent actions com.ardroid.app.action.START_VM and STOP_VM.</string>
     <string name="reset_vm">Reset VM (deletes all data)</string>
     <string name="reset_vm_description">Full App Reset?</string>
     <string name="reset_vm_text">This will clear ALL application data, including your VM storage, settings, and port rules. The app will close and return to a freshly-installed state.</string>
@@ -106,7 +106,7 @@
     <string name="avf_diagnostic">AVF (pKVM) diagnostic</string>
     <string name="running_avf_diagnostic">Running AVF diagnostic…</string>
     <string name="probing_avf">Probing…</string>
-    <string name="export_diagnostic_subject">Podroid Diagnostic Log</string>
+    <string name="export_diagnostic_subject">ArDroid Diagnostic Log</string>
     <string name="export_diagnostic_chooser">Share diagnostic log</string>
     <string name="export_diagnostic_failed">Export failed: %1$s</string>
     <string name="unknown_error">unknown error</string>
@@ -117,9 +117,6 @@
     <string name="vm_port">VM port</string>
     <string name="e_g_8080">e.g. 8080</string>
     <string name="e_g_80">e.g. 80</string>
-    <string name="tcp">TCP</string>
-    <string name="udp">UDP</string>
-    <string name="both">Both</string>
     <string name="enter_valid_ports">Enter valid port numbers (1–65535)</string>
     <string name="port_already_forwarded">Port %1$d (%2$s) is already forwarded</string>
     <string name="port_reserved">Port %1$d is reserved for the in-app desktop</string>
@@ -134,7 +131,7 @@
     <string name="port_forwards_count">Port forwards (%1$d)</string>
     <string name="port_forwards_clean">Clean all</string>
     <string name="port_forwards_clean_confirm_title">Remove all port forwards?</string>
-    <string name="port_forwards_clean_confirm_body">This removes all %1$d forwarding rules. Podroid\'s own forwards (SSH, display, audio) are not affected.</string>
+    <string name="port_forwards_clean_confirm_body">This removes all %1$d forwarding rules. ArDroid\'s own forwards (SSH, display, audio) are not affected.</string>
     <string name="port_forwards_clean_confirm_btn">Remove all</string>
     <string name="none">None</string>
     <string name="active">active</string>
@@ -167,7 +164,7 @@
     <string name="container_backup_location">Backup location</string>
     <string name="container_backup_guest_path">Guest path</string>
     <string name="container_backup_phone_path">On phone (Downloads)</string>
-    <string name="container_backup_phone_path_value">Download/Podroid/backups</string>
+    <string name="container_backup_phone_path_value">Download/ArDroid/backups</string>
     <string name="container_backup_downloads_hint">Enable Downloads sharing in Settings so backups appear on your phone.</string>
     <string name="container_backup_export">Export container</string>
     <string name="container_backup_vm_stopped">Start the VM before running backup commands.</string>
@@ -180,10 +177,10 @@
     <string name="container_backup_tools">Tools</string>
     <string name="container_backup_copy_list">Copy list command</string>
     <string name="container_backup_copy_all">Copy backup-all command</string>
-    <string name="container_backup_terminal_hint">Paste into the Podroid terminal. podroid-backup is included in newer guest images; older images fall back to podman export automatically.</string>
+    <string name="container_backup_terminal_hint">Paste into the ArDroid terminal. podroid-backup is included in newer guest images; older images fall back to podman export automatically.</string>
     <string name="container_backup_on_phone">Backups on phone</string>
     <string name="container_backup_refresh">Refresh list</string>
-    <string name="container_backup_none">No backup archives found in Downloads/Podroid/backups yet.</string>
+    <string name="container_backup_none">No backup archives found in Downloads/ArDroid/backups yet.</string>
     <string name="container_backup_list_error">Couldn\'t read the backup folder. Try Refresh.</string>
     <string name="container_backup_copied">Command copied</string>
 
@@ -202,7 +199,7 @@
     <!-- AVF Hint -->
     <string name="avf_available">AVF (KVM) available on this device</string>
     <string name="avf_hint_needs_pc">Needs a PC with adb, or the Shizuku app for on-device grant. Run once:</string>
-    <string name="avf_grant_commands">adb shell pm grant com.excp.podroid \\\n  android.permission.MANAGE_VIRTUAL_MACHINE\nadb shell pm grant com.excp.podroid \\\n  android.permission.USE_CUSTOM_VIRTUAL_MACHINE</string>
+    <string name="avf_grant_commands">adb shell pm grant com.ardroid.app \\\n  android.permission.MANAGE_VIRTUAL_MACHINE\nadb shell pm grant com.ardroid.app \\\n  android.permission.USE_CUSTOM_VIRTUAL_MACHINE</string>
 
     <!-- Backend fallback (#66): AVF was forced but this device can't run it -->
     <string name="backend_fallback_suffix">" - AVF unavailable, running QEMU"</string>
@@ -215,7 +212,7 @@
 
     <!-- Permissions -->
     <string name="permissions">Permissions</string>
-    <string name="permissions_description">Podroid needs these to run the VM reliably.</string>
+    <string name="permissions_description">ArDroid needs these to run the VM reliably.</string>
     <string name="permissions_needed">Permissions needed</string>
     <string name="perm_notifications_title">Notifications</string>
     <string name="perm_notifications_why">Shows the VM\'s state and lets you stop it from the notification shade.</string>
@@ -250,9 +247,6 @@
     <string name="sharing">Sharing</string>
 
     <!-- Terminal -->
-    <string name="paste_text">Paste</string>
-    <string name="copy_text">Copy</string>
-    <string name="text_selection_more">More…</string>
     <string name="terminal_title">Terminal</string>
     <string name="vm_not_running_hint">Start the VM from the Home screen first.</string>
     <string name="back_to_home">Back to Home</string>
@@ -326,10 +320,10 @@
     <string name="usb_passthrough_description">Optional. Hot-plug external USB devices (Wi-Fi, storage, serial, etc.) into the VM at runtime.</string>
     <string name="enable_usb_passthrough">Enable USB passthrough</string>
     <string name="usb_devices_section">Devices</string>
-    <string name="usb_passthrough_available">Each device asks for permission when you plug it in. Adds a USB controller to the VM, which costs a little emulation overhead, so leave it off if you do not need it. You can change this later in Settings.</string>
+    <string name="usb_passthrough_available">Each device asks for permission when you plug it in. Keyboards, mice, trackpads and touchscreens stay with the phone. Adds a USB controller to the VM, which costs a little emulation overhead, so leave it off if you do not need it. You can change this later in Settings.</string>
     <string name="usb_passthrough_unavailable">Not available on this backend: USB passthrough needs QEMU control socket, which the AVF backend does not provide. You can change this later in Settings.</string>
     <string name="usb_passthrough_settings_label">USB passthrough</string>
-    <string name="usb_passthrough_settings_description_available">Hot-plugs external USB devices (Wi-Fi, storage, serial, etc.) into the VM. Each device asks for permission when attached. Adds a USB controller at boot, so restart the VM to apply.</string>
+    <string name="usb_passthrough_settings_description_available">Hot-plugs external USB devices (Wi-Fi, storage, serial, etc.) into the VM. Each device asks for permission when attached; keyboards, mice and other input devices stay with the phone. Adds a USB controller at boot, so restart the VM to apply.</string>
     <string name="usb_passthrough_settings_description_unavailable">Not available on the %1$s backend: USB passthrough rides QEMU\'s QMP control socket, which the AVF backend doesn\'t provide.</string>
     <string name="server_mode">Server mode</string>
     <string name="server_mode_desc">Keeps the VM running with the screen blacked out to save power. The app stays in the foreground so the VM is never stopped. To exit, press and hold anywhere for 3 seconds.</string>

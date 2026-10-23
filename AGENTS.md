@@ -19,7 +19,7 @@ It is a fork of [Podroid](https://github.com/ExTV/Podroid) (ExTV/Podroid@ce01218
 
 | | |
 |---|---|
-| Package | `com.excp.podroid` (debug: `com.excp.podroid.debug`) - rebrand deferred |
+| Package | `com.ardroid.app` (debug: `com.ardroid.app.debug`) |
 | Version | `versionName` / `versionCode` in `app/build.gradle.kts` |
 | Min / target SDK | 26 (Android 8) / 36 |
 | Architecture | arm64 (`aarch64`) only |
@@ -51,8 +51,8 @@ It is a fork of [Podroid](https://github.com/ExTV/Podroid) (ExTV/Podroid@ce01218
 
 **Monitor VM boot:**
 ```bash
-adb logcat -s PodroidQemu
-adb shell run-as com.excp.podroid.debug cat files/console.log   # debug build
+adb logcat -s QemuEngine
+adb shell run-as com.ardroid.app.debug cat files/console.log   # debug build
 ```
 
 Native binaries require **16KB page alignment** (`-Wl,-z,max-page-size=16384`) - mandatory on Android 13+.
@@ -105,21 +105,21 @@ On **AVF** there is no QMP and no PL011: the console is captured via `ConsoleFan
    - `podroid-downloads.service` - Downloads-folder sharing.
    - `podroid-x11.service` - Xvnc + PulseAudio for the X11 viewer.
    - `podroid-migrate.service` - one-shot guest migrations on version change.
-   - `podroid-getty@.service` - `agetty --noissue` on hvc0 via the `podroid-getty` wrapper (picks the tty from the `podroid.tty=` cmdline marker; Arch has `/sbin/agetty`, no `/sbin/getty`).
+   - `podroid-getty@.service` - plain `agetty` on hvc0 via the `podroid-getty` wrapper (picks the tty from the `podroid.tty=` cmdline marker; Arch has `/sbin/agetty`, no `/sbin/getty`). The wrapper also restores the winsize from `/run/term_size` via `stty -F` (moved here from the deleted `podroid-login`). **Never pass `-l` here:** the host-side bridge connects to the console after boot (QEMU's chardev discards whatever agetty printed before that) and then sends a lone-CR "kick"; plain agetty reads it as an empty login name and re-displays `/etc/issue` + the login prompt — that re-display is the ONLY `/etc/issue` the user ever sees. With `-l` the CR landed in `/bin/login` (which never prints `/etc/issue`) and the pre-login greeting stayed invisible (root-caused 2026-10-21). `-t 30` was removed 2026-10-22 (it re-printed the banner every 30 idle seconds via Restart=always; the kick-wait gate had made the boot-race safety net obsolete) — but the user rejected a timeout-free prompt without being consulted, and explicitly asked for a 2-minute timeout, so agetty now runs with `-t 120`. Plain consequence: an idle prompt still re-prints the banner, every 120s instead of 30s. Lesson: do not unilaterally change user-visible behavior — consult him first: agetty exits after 30s idle at the login prompt and systemd restarts it, re-printing `/etc/issue` once the bridge is attached (verified on-device: the issue appears on every getty restart). Deeper: agetty frees the issue text from memory after its first print (util-linux issuefile.c), so the bridge's CR kick could only ever re-display an empty prompt — the kick had to become a *start* gate instead. The wrapper now waits for the kick (`timeout 30 dd` consuming one byte from the tty) before exec'ing agetty, but only on the first start after boot (flag `/run/ardroid-getty-kicked`); restarts skip the wait. Root-caused 2026-10-22. **Never let another getty share hvc0:** `systemd-getty-generator` auto-creates `serial-getty@hvc0` whenever `/dev/hvc0` exists — that hidden twin raced this getty for console input and scrambled logins (split/lost keystrokes, echoed passwords, doubled prompts; root-caused 2026-10-20). It is masked twice: an `/etc/systemd/system/serial-getty@hvc0.service` → `/dev/null` symlink baked into the image by `build-rootfs.sh`, and `systemd.mask=serial-getty@hvc0.service` on the guest cmdline from both engines.
    - `podroid-ready.service` - emits `Starting SSH...` / `Almost ready...` / `Ready!`, the markers `BootStageDetector` matches; `Ready!` flips state to `Running` and auto-starts the terminal bridge.
-4. The welcome banner is printed **after login** by `/etc/profile.d/ardroid-welcome.sh` (the getty-time `/etc/issue` proved unreliable on the phone terminal, so agetty runs with `--noissue`).
+4. Two greetings: **before login**, agetty prints `/etc/issue` (default login + tips); **after login**, `/etc/profile.d/ardroid-welcome.sh` prints the welcome banner. (The issue text was long suppressed with `--noissue` for 'unreliability' — that was actually the `serial-getty@hvc0` twin printing it at random times; with the twin masked it is deterministic again.)
 
 **Why `switch_root`, not `chroot`:** an earlier version `chroot`ed into the overlay, which broke `podman exec -it` - `setns(MNT)` in `crun exec` resets `fs->root`, so the exec'd process saw raw kernel paths (`/mnt/overlay/proc`) instead of `/proc`. `switch_root` reorganizes the kernel mount tree itself, so namespace forks see a clean `/`.
 
 ### Guest → Android host bridge
 
-Lets guest processes call back to Android. Guest side: `podroid-hostd` (multi-call C binary, `build-rootfs/host-bridge/podroid-hostd.c`) owns a guest-local `AF_UNIX` socket `/run/podroid-host.sock`; `argv[0]` dispatch also exposes it as `podroid-notify` and `podroid-forward` (symlinks). The daemon relays one request line / one response line to Android over a backend transport: `/dev/hvc2` on QEMU, `AF_VSOCK:9101` on AVF (chosen by the `podroid.backend=avf` cmdline marker). Android side: `engine/hostbridge/` - `HostRequestServer` reads requests over a `HostTransport` (`QemuHostTransport` via `LocalSocket` to `host.sock`, or `AvfHostTransport` via `connectVsock`), `HostRequestDispatcher` parses them, and routes to `NotificationPoster` (posts via `NotificationManagerCompat`) or `PortForwardRepository` (rules persist and `EngineHolder` applies them live). `PodroidService` starts/stops the server over the VM lifecycle. Stop or parent cancellation shuts down the active transport to unblock reads; a transport returned by a late native connect is closed without dispatching. Android accepts only complete UTF-8 request lines up to 8191 bytes (matching the guest buffer). Free-text fields are base64 (`HostProtocol.kt`) so UTF-8 survives. The daemon also self-originates a `STATS containers=<n>` push (inotify-driven, debounced) whenever the podman container count changes, which `HostRequestDispatcher` persists to the `last_container_count` DataStore key for `HomeViewModel` to show live on Home - the same channel on both backends, no polling.
+Lets guest processes call back to Android. Guest side: `podroid-hostd` (multi-call C binary, `build-rootfs/host-bridge/podroid-hostd.c`) owns a guest-local `AF_UNIX` socket `/run/podroid-host.sock`; `argv[0]` dispatch also exposes it as `podroid-notify` and `podroid-forward` (symlinks). The daemon relays one request line / one response line to Android over a backend transport: `/dev/hvc2` on QEMU, `AF_VSOCK:9101` on AVF (chosen by the `podroid.backend=avf` cmdline marker). Android side: `engine/hostbridge/` - `HostRequestServer` reads requests over a `HostTransport` (`QemuHostTransport` via `LocalSocket` to `host.sock`, or `AvfHostTransport` via `connectVsock`), `HostRequestDispatcher` parses them, and routes to `NotificationPoster` (posts via `NotificationManagerCompat`) or `PortForwardRepository` (rules persist and `EngineHolder` applies them live). `ArDroidService` starts/stops the server over the VM lifecycle. Stop or parent cancellation shuts down the active transport to unblock reads; a transport returned by a late native connect is closed without dispatching. Android accepts only complete UTF-8 request lines up to 8191 bytes (matching the guest buffer). Free-text fields are base64 (`HostProtocol.kt`) so UTF-8 survives. The daemon also self-originates a `STATS containers=<n>` push (inotify-driven, debounced) whenever the podman container count changes, which `HostRequestDispatcher` persists to the `last_container_count` DataStore key for `HomeViewModel` to show live on Home - the same channel on both backends, no polling.
 
 > **Gotcha:** `/dev/hvc2` is a virtio-console **TTY** that defaults to echo on. The daemon must `cfmakeraw()` it, or the TTY echoes Android's responses back and the protocol desyncs after the first request. AVF (a raw vsock socket) is unaffected.
 
 ### Downloads sharing over 9p (`engine/avf/AvfDownloadsShare.kt` + `engine/avf/ninep/`)
 
-**AVF only.** Serves the real Android Downloads directory into the guest by running an in-process **9p2000.L** server (`Ninep2000LServer.kt`, ~886 LoC; wire format in `NinepCodec.kt`) over vsock. This is why the guest can read and write user files without the app holding broad storage permissions, and it is how `podroid-backup` archives land in `Downloads/Podroid/backups` for `ContainerBackupRepository` to list.
+**AVF only.** Serves the real Android Downloads directory into the guest by running an in-process **9p2000.L** server (`Ninep2000LServer.kt`, ~886 LoC; wire format in `NinepCodec.kt`) over vsock. This is why the guest can read and write user files without the app holding broad storage permissions, and it is how `podroid-backup` archives land in `Downloads/ArDroid/backups` for `ContainerBackupRepository` to list.
 
 There is no QEMU equivalent, so any feature built on the share is backend-asymmetric by construction and must degrade cleanly on QEMU.
 
@@ -133,7 +133,7 @@ In-app viewer that talks RFB to `Xvnc` in the guest, with touch→mouse, soft-ke
 
 ### Terminal keyboard
 
-`TerminalViewModel.shouldEnforceCharBasedInput()` returns `false`, so the soft keyboard runs with `InputType.TYPE_NULL` and word suggestions/autocomplete work normally. (Upstream Termux used `true` here as a Samsung-keyboard workaround, which set `TYPE_TEXT_FLAG_NO_SUGGESTIONS` and broke suggestions.)
+`TerminalViewModel.shouldEnforceCharBasedInput()` returns `true`, so the soft keyboard runs char-based (`TYPE_TEXT_VARIATION_VISIBLE_PASSWORD | TYPE_TEXT_FLAG_NO_SUGGESTIONS`) and keystrokes reach the guest verbatim. Do NOT flip this back to `false` (`TYPE_NULL`) for word suggestions: that was tried in 6e93d6e and reverted on 2026-10-20 — with `TYPE_NULL` the IME commits composed/autocorrected text, which silently altered the getty password on the owner's phone (login rejected a password whose stored hash was verified correct). Suggestions stay off until an input path exists that cannot rewrite committed text.
 
 ### Internationalization
 
@@ -149,9 +149,9 @@ Single-activity Compose app: `ui/navigation/NavGraph.kt` routes `setup → home 
 /
 ├── app/                              # Android module
 │   └── src/main/
-│       ├── java/com/excp/podroid/
+│       ├── java/com/ardroid/app/
 │       │   ├── MainActivity.kt           # single Activity, locale wrap, WindowSizeClass
-│       │   ├── PodroidApplication.kt     # Hilt app, asset extraction on first run
+│       │   ├── ArDroidApplication.kt     # Hilt app, asset extraction on first run
 │       │   ├── engine/
 │       │   │   ├── VmEngine.kt           # backend interface
 │       │   │   ├── EngineHolder.kt       # Hilt binding; routes to current engine; port-forward diff
@@ -188,7 +188,7 @@ Single-activity Compose app: `ui/navigation/NavGraph.kt` routes `setup → home 
 │   ├── host-bridge/                     # podroid-hostd.c (guest->Android bridge daemon + CLIs)
 │   └── files/                           # systemd units, helpers, configs baked into the squashfs
 │       ├── etc/systemd/system/          # 12 podroid-*.service units (+ podroid-getty@.service)
-│       └── usr/local/bin/               # podroid-getty, podroid-login, podroid-bootstrap, ...
+│       └── usr/local/bin/               # podroid-getty, podroid-bootstrap, ...
 ├── .github/workflows/build-apk.yml     # cloud build (workflow_dispatch): rootfs via Docker + assembleDebug
 └── README.md, CONTRIBUTING.md, CREDITS.md
 ```
@@ -221,7 +221,7 @@ The terminal emulator JNI is built from the vendored `terminal-emulator` module 
   - *Rootfs reuse:* if `build-rootfs/` and the workflow file are unchanged since the last successful run, the `arch-rootfs.squashfs` is downloaded from that run's `arch-rootfs-squashfs` artifact instead of rebuilding (~15 min vs ~3h). Every run re-uploads the squashfs to keep the chain alive.
   - *box64 package cache:* `actions/cache` keyed on the AUR HEAD sha; `build-rootfs.sh` installs `/build/box64-prebuilt.pkg.tar.zst` when valid, else compiles from the AUR and exports the package for the next run (~1.5h saved).
 - **`build-rootfs/Dockerfile.rootfs`** - fetches the Arch Linux ARM aarch64 tarball, runs `build-rootfs.sh`: `pacman -Syu` (base + systemd + podman + docker + lxc + dropbear + openssh + tigervnc + pulseaudio + ...), builds **box64 from the AUR** as a throwaway `builder` user (build deps installed `--asdeps`, orphan-swept after; `sudo`/`gzip` re-marked `--asexplicit` so the sweep can't remove them), writes `/etc/issue` + `/etc/profile.d/ardroid-welcome.sh`, sets the root password hash, installs the 12 systemd units + helpers, then `mksquashfs -comp zstd`. A build-time check `unsquashfs -l`s the image and **fails the build** if `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, or `/usr/bin/box64` are missing.
-- The local `Dockerfile` / `build-all.sh` kernel+QEMU stages are **legacy** - the kernel and QEMU are prebuilt and reused; do not spend time on kernel configs.
+- The root `Dockerfile`, `podroid_kernel.config` and the `build-all.sh` kernel/QEMU stages were **deleted** (2026-10-22 cleanup) - the kernel and QEMU are prebuilt and reused; there is nothing to tune in the repo.
 
 ## Performance tuning (TCG path; KVM is impossible without root)
 
@@ -229,7 +229,7 @@ In `QemuEngine.buildCommand()`: `tcg,thread=multi`, larger `tb-size` for ≥2GB 
 
 ## Quirks & gotchas
 
-- **The kernel is prebuilt - repo kernel configs are inert.** Don't tune `podroid_kernel.config`; it changes nothing in the shipped APK.
+- **The kernel is prebuilt - there are no kernel configs in the repo.** (`podroid_kernel.config` was deleted 2026-10-22.) Kernel changes require rebuilding the prebuilt kernel outside this repo; nothing here affects the shipped kernel.
 - **pacman needs `DisableSandbox`.** The reused kernel lacks Landlock, so pacman 7's sandbox fails with "restricting filesystem access failed". `DisableSandbox` is set in the builder's `pacman.conf` AND baked into the guest image at `$ROOTFS/etc/pacman.conf`. If `pacman -Syu` in the guest ever fails with a sandbox error, this line is missing.
 - **`mksquashfs -e` consumes every argument after it.** Pseudo-dir defs (`-p "/proc d 555 0 0"`) must come BEFORE `-e`, or they silently become excludes and the guest panics at boot (`mount --move /proc failed`). The Dockerfile fails fast on this.
 - **Arch has `/sbin/agetty`, not `/sbin/getty`.** The old busybox path crashes the getty in a restart loop.

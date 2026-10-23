@@ -204,6 +204,11 @@ int main(int argc, char *argv[]) {
 
     send_resize();
 
+    /* Ignore SIGPIPE before ANY write: if the socket breaks between a
+     * successful connect() and the first write, the default disposition
+     * would kill the process instead of letting write_all() report EPIPE. */
+    signal(SIGPIPE, SIG_IGN);
+
     /* Kick getty to (re)emit the login prompt. terminal.sock is a QEMU chardev
      * with server=on,wait=off, so whatever getty printed to hvc0 before this
      * bridge connected was discarded (no client attached). getty starts right
@@ -229,7 +234,6 @@ int main(int argc, char *argv[]) {
     signal(SIGWINCH, on_winch);
     signal(SIGINT,   on_term);
     signal(SIGTERM,  on_term);
-    signal(SIGPIPE,  SIG_IGN);
 
     /* 64 KB matches the sixel4 fork's main-thread PTY drain buffer and the new
      * 64 KB reader on the TerminalSession side — fewer syscalls for chunked

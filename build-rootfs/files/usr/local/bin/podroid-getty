@@ -1,5 +1,5 @@
 #!/bin/sh
-# Wrapper for inittab's per-tty getty lines. Two gettys (hvc0 + ttyS0) are
+# Wrapper for the per-tty getty services. Two gettys (hvc0 + ttyS0) are
 # declared because the backend isn't known at squashfs-build time; this
 # script picks the right one at boot via the kernel cmdline marker:
 #
@@ -16,14 +16,84 @@ WANT=$(sed -n 's/.*podroid\.tty=\([a-zA-Z0-9]*\).*/\1/p' /proc/cmdline)
 [ -z "$WANT" ] && WANT=hvc0
 
 if [ "$TTY" = "$WANT" ]; then
+    # Restore the terminal size from /run/term_size (written by podroid-resize
+    # on QEMU) before agetty starts — virtio-console + PL011 serial both reset
+    # winsize to 0x0 on every getty respawn, so without this TUI apps (btop,
+    # htop, vim, less) bail with "Failed to get size of terminal". (This lived
+    # in podroid-login before 2026-10-21; that script is deleted — see below.)
+    #
+    # AVF doesn't run podroid-resize for ttyS0 (no SIGWINCH propagation
+    # channel yet), so /run/term_size won't exist there — fall back to a
+    # sensible default rather than leaving winsize at 0x0.
+    _r=""
+    _c=""
+    if [ -r /run/term_size ]; then
+        read _r _c < /run/term_size
+    fi
+    # Reject empty, non-numeric, and 0 (a 0x0 winsize is the exact failure this
+    # exists to prevent: TUIs bail "Failed to get size of terminal").
+    case "$_r" in ''|*[!0-9]*|0) _r=24;; esac
+    case "$_c" in ''|*[!0-9]*|0) _c=80;; esac
+    # NOTE: the wrapper's own stdin is not the tty (it is started by systemd),
+    # so the device is addressed explicitly.
+    stty -F "/dev/$TTY" rows "$_r" cols "$_c" 2>/dev/null
+
+    # Synchronize with the host-side terminal bridge before starting agetty.
+    # The bridge sends a lone CR when it connects; QEMU's chardev
+    # (server=on,wait=off) discards anything printed before that moment, so
+    # starting agetty earlier prints /etc/issue into the void. Worse, agetty
+    # frees the issue text from memory after its first print, so the CR kick
+    # arriving later only re-displays an empty prompt (root-caused 2026-10-22
+    # from util-linux agetty-cmd/issuefile.c: print frees ie->mem).
+    # We therefore wait for the kick here (consuming the byte) and only then
+    # exec agetty — the greeting is then printed exactly once, to a live
+    # terminal, the instant the bridge attaches.
+    # Only on the first start after boot (flag in /run, cleared on reboot):
+    # restarts (logout, login timeout) must NOT wait — the bridge is already
+    # attached and will not re-kick. The 30s timeout covers the in-guest
+    # reboot case, where the already-connected bridge stays silent; we then
+    # proceed anyway and the bridge is attached there too.
+    if [ ! -e /run/ardroid-getty-kicked ]; then
+        stty -F "/dev/$TTY" -echo 2>/dev/null
+        timeout 30 dd if="/dev/$TTY" of=/dev/null bs=1 count=1 2>/dev/null
+        : > /run/ardroid-getty-kicked
+        # Give the host-side terminal session a moment to attach and start
+        # displaying. The kick means the bridge socket connected, but agetty
+        # printing /etc/issue in the same millisecond can land before the
+        # session is ready, losing the banner (diagnosed 2026-10-23: the
+        # login prompt survived only because it prints slightly later).
+        # 2s affects first boot only; restarts skip this block entirely.
+        sleep 2
+    fi
+
     # NOTE: no screen-clear here. A clear sequence before agetty used to wipe
     # the login banner on some terminals (it was only needed on AVF, where
-    # boot markers share hvc0). The welcome banner is shown after login
-    # instead (see /etc/profile.d/ardroid-welcome.sh), so agetty runs with
-    # --noissue to avoid ever printing it twice.
+    # boot markers share hvc0).
+    # NOTE: agetty runs WITHOUT -l on purpose. /etc/issue (the pre-login
+    # greeting) is printed by agetty itself: once at startup, and again every
+    # time it re-prompts after an empty login name (verified in util-linux
+    # agetty-cmd/agetty.c: get_logname() loops empty names through do_prompt(),
+    # which re-prints the issue file first). That re-display is the ONLY issue
+    # text the user ever sees, because of the boot race: the host-side bridge
+    # (podroid-bridge) connects to the console after boot — QEMU's chardev
+    # (server=on,wait=off) discards whatever agetty printed before that moment
+    # — and then sends a lone-CR "kick". Plain agetty reads the CR as an empty
+    # login name and re-displays /etc/issue + the login prompt. The old
+    # "-l /usr/local/bin/podroid-login" broke this: agetty never prompted for
+    # a name itself, the CR landed in /bin/login (which never prints
+    # /etc/issue), and the greeting stayed invisible forever (root-caused
+    # 2026-10-21; podroid-login deleted, its winsize fix moved above).
+    # NOTE: -t 120 (2-minute login timeout), set 2026-10-22 per the user's
+    # explicit request ("خلي المدة دقيقتين"). Plain consequence: combined with
+    # systemd Restart=always, an idle prompt exits every 120s and the banner
+    # re-prints — the same repetition seen with -t 30, just 4x slower. That
+    # is standard getty behavior. (The -t 30 boot-race safety net became
+    # obsolete once the kick-wait gate above guaranteed agetty only starts
+    # after the bridge attaches; the timeout now exists purely because the
+    # user wants a bounded idle wait, not an endless one.)
     # NOTE: Arch ships agetty as /sbin/agetty (via /sbin -> /usr/bin);
 # there is no /sbin/getty on Arch (that was Alpine/busybox).
-    exec /sbin/agetty -L --noissue -l /usr/local/bin/podroid-login 115200 "$TTY" xterm-256color
+    exec /sbin/agetty -L -t 120 115200 "$TTY" xterm-256color
 fi
 
 # Wrong tty for this backend. Sleep instead of exiting so busybox init

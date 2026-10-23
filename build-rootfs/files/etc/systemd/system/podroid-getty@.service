@@ -1,10 +1,13 @@
 [Unit]
 Description=ArDroid getty on %I (backend-aware serial console)
+# A getty is critical: never let systemd's start-rate limit park it in
+# failed state permanently (default is 5 restarts per 10s).
 
 [Service]
 ExecStart=/usr/local/bin/podroid-getty %I
 Restart=always
 RestartSec=1
+StartLimitIntervalSec=0
 
 [Install]
 WantedBy=getty.target
