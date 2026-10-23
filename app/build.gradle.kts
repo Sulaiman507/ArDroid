@@ -25,7 +25,7 @@ android {
         applicationId = "com.ardroid.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 33
+        versionCode = 34
         versionName = "1.0.0"
         buildConfigField("String", "QEMU_VERSION", "\"$ardroidQemuVersion\"")
 
