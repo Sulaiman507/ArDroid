@@ -78,24 +78,26 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** Aggregated metadata for the Home data sections. */
-    // Typed 6-flow combine: the vararg combine() infers a reified type argument
-    // as the intersection of the flow value types (Comparable & Serializable),
-    // which Kotlin 2.4 rejects as an error (was a warning under Kotlin 2.2).
-    val meta: StateFlow<HomeMeta> = combine(
+    // 6-flow combine: kotlinx-coroutines only provides typed combine() overloads
+    // up to 5 flows, so a 6-flow call must use the reified vararg overload.
+    // T is pinned to Any? explicitly: inferring it from the mixed flow types
+    // yields the intersection (Comparable & Serializable), which Kotlin 2.4
+    // rejects as an error for reified type parameters (was a warning in 2.2).
+    val meta: StateFlow<HomeMeta> = combine<Any?, HomeMeta>(
         settingsRepository.vmRamMb,
         settingsRepository.vmCpus,
         settingsRepository.storageSizeGb,
         settingsRepository.sshEnabled,
         portForwardRepository.rules.map { it.size }.distinctUntilChanged(),
         settingsRepository.lastBootDurationMs,
-    ) { ramMb, cpus, storageGb, sshEnabled, portForwardCount, lastBootDurationMs ->
+    ) { values ->
         HomeMeta(
-            ramMb = ramMb,
-            cpus = cpus,
-            storageGb = storageGb,
-            sshEnabled = sshEnabled,
-            portForwardCount = portForwardCount,
-            lastBootDurationMs = lastBootDurationMs,
+            ramMb = values[0] as Int,
+            cpus = values[1] as Int,
+            storageGb = values[2] as Int,
+            sshEnabled = values[3] as Boolean,
+            portForwardCount = values[4] as Int,
+            lastBootDurationMs = values[5] as Long,
         )
     }.stateIn(
         viewModelScope,
