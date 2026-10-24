@@ -78,6 +78,9 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** Aggregated metadata for the Home data sections. */
+    // Typed 6-flow combine: the vararg combine() infers a reified type argument
+    // as the intersection of the flow value types (Comparable & Serializable),
+    // which Kotlin 2.4 rejects as an error (was a warning under Kotlin 2.2).
     val meta: StateFlow<HomeMeta> = combine(
         settingsRepository.vmRamMb,
         settingsRepository.vmCpus,
@@ -85,14 +88,14 @@ class HomeViewModel @Inject constructor(
         settingsRepository.sshEnabled,
         portForwardRepository.rules.map { it.size }.distinctUntilChanged(),
         settingsRepository.lastBootDurationMs,
-    ) { values ->
+    ) { ramMb, cpus, storageGb, sshEnabled, portForwardCount, lastBootDurationMs ->
         HomeMeta(
-            ramMb = values[0] as Int,
-            cpus = values[1] as Int,
-            storageGb = values[2] as Int,
-            sshEnabled = values[3] as Boolean,
-            portForwardCount = values[4] as Int,
-            lastBootDurationMs = values[5] as Long,
+            ramMb = ramMb,
+            cpus = cpus,
+            storageGb = storageGb,
+            sshEnabled = sshEnabled,
+            portForwardCount = portForwardCount,
+            lastBootDurationMs = lastBootDurationMs,
         )
     }.stateIn(
         viewModelScope,
